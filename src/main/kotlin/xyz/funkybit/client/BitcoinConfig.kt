@@ -4,7 +4,6 @@ import org.bitcoinj.core.NetworkParameters
 import java.math.BigInteger
 
 data class BitcoinConfig(
-    val enabled: Boolean,
     val net: String,
     val feeSettings: FeeEstimationSettings,
     val blockExplorerNetName: String,
@@ -31,7 +30,6 @@ data class BitcoinConfig(
 
 val bitcoinConfig =
     BitcoinConfig(
-        enabled = (System.getenv("BITCOIN_NETWORK_ENABLED") ?: "true").toBoolean(),
         net = System.getenv("BITCOIN_NETWORK_NAME") ?: "org.bitcoin.regtest",
         feeSettings =
             BitcoinConfig.FeeEstimationSettings(
@@ -41,6 +39,6 @@ val bitcoinConfig =
                 maxValue = System.getenv("BITCOIN_MAX_FEE_VALUE")?.toIntOrNull() ?: 50,
             ),
         blockExplorerNetName = System.getenv("BLOCK_EXPLORER_NET_NAME_BITCOIN") ?: "Bitcoin Network",
-        blockExplorerUrl = System.getenv("BLOCK_EXPLORER_URL_BITCOIN") ?: "http://localhost:1080",
+        blockExplorerUrl = System.getenv("BLOCK_EXPLORER_URL_BITCOIN") ?: "https://mempool.space",
         changeDustThreshold = BigInteger(System.getenv("BITCOIN_CHANGE_DUST_THRESHOLD") ?: "546"),
     )

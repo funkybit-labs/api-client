@@ -111,7 +111,7 @@ sealed class MempoolSpaceApi {
 }
 
 class MempoolSpaceClient(
-    private val apiServerRootUrl: String = System.getenv("MEMPOOL_SPACE_API_URL") ?: "http://localhost:1080/api",
+    private val apiServerRootUrl: String = System.getenv("MEMPOOL_SPACE_API_URL") ?: "https://mempool.space/api",
 ) {
     val logger = KotlinLogging.logger {}
     private val recommendedFeeRoute = System.getenv("MEMPOOL_SPACE_RECOMMENDED_FEE_ROUTE") ?: "fees/recommended"

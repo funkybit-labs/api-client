@@ -64,7 +64,7 @@ class FunkybitApiClient(
     val address = keyPair.address()
 
     companion object {
-        val DEFAULT_API_URL = System.getenv("API_URL") ?: "https://prod-api.funkybit.fun"
+        val DEFAULT_API_URL = System.getenv("FUNKYBIT_API_URL") ?: "https://prod-api.funkybit.fun"
 
         val httpClient =
             OkHttpClient

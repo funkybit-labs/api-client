@@ -12,8 +12,7 @@ This example demonstrates how to use the funkybit API client to:
 
 - Java 17 or higher
 - Gradle 8.0 or higher
-- EVM private key with sufficient funds for deposits and gas fees
-- Bitcoin private key with sufficient funds (if trading Bitcoin)
+- EVM and Bitcoin accounts with sufficient funds for deposits and gas fees
 
 ## Configuration
 
@@ -28,7 +27,32 @@ val quoteIsOnBitcoin = true            // Whether quote asset is on Bitcoin
 val makerBaseAmount = "0.0001"         // Amount for limit sell order
 val price = "1.0"                      // Price for limit sell order
 val takerQuoteAmount = "0.0001"        // Amount for market buy order
-val privateKey = "0x..."               // Your EVM private key
+val privateKey = "0x..."               // Your private key (used for both evm and bitcoin addresses)
+```
+
+Alternatively, you can configure the client using environment variables:
+
+```bash
+# API Configuration
+FUNKYBIT_API_URL=https://prod-api.funkybit.fun  # API endpoint URL
+FUNKYBIT_PRIVATE_KEY=0x...
+
+# Bitcoin Network Configuration
+BITCOIN_NETWORK_NAME=org.bitcoin.regtest  # Bitcoin network name
+BITCOIN_MIN_FEE_VALUE=5                # Minimum fee value in satoshis
+BITCOIN_MAX_FEE_VALUE=50               # Maximum fee value in satoshis
+BITCOIN_CHANGE_DUST_THRESHOLD=546      # Change dust threshold in satoshis
+BLOCK_EXPLORER_NET_NAME_BITCOIN="Bitcoin Network"  # Block explorer network name
+BLOCK_EXPLORER_URL_BITCOIN=https://mempool.space   # Block explorer URL
+
+# Web3 Configuration
+ENABLE_WEB3J_LOGGING=true              # Enable/disable Web3j logging
+MAX_RPC_NODE_EVENTUAL_CONSISTENCE_TOLERANCE_MS=60000  # Max RPC node consistency tolerance in ms
+
+# Mempool.space Configuration
+MEMPOOL_SPACE_API_URL=https://mempool.space/api  # Mempool.space API URL
+MEMPOOL_SPACE_RECOMMENDED_FEE_ROUTE=fees/recommended  # Recommended fee route
+
 ```
 
 ## Running the Example
@@ -46,6 +70,5 @@ val privateKey = "0x..."               // Your EVM private key
 ## Notes
 
 - Make sure to use valid private keys with sufficient funds
-- The example uses a BTC/BTC market for demonstration
 - Adjust amounts and prices based on your needs
-- The example includes proper cleanup of orders and balances 
+- The example includes proper cleanup of orders and balances

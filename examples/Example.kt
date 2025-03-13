@@ -46,7 +46,7 @@ import java.math.BigInteger
  * Example demonstrating how to use the funkybit API client
  */
 fun main() {
-    val endpoint = "https://prod-api.funkybit.fun"
+    val endpoint = FunkybitApiClient.DEFAULT_API_URL
     val base = "BTC"
     val baseIsOnBitcoin = false
     val quote = "BTC"
@@ -55,7 +55,8 @@ fun main() {
     val price = "1.0"
     val takerQuoteAmount = "0.0001"
     // Create a client with a wallet
-    val privateKey = "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3" // Example key - replace with your own
+    // Example key - replace with your own
+    val privateKey = System.getenv("FUNKYBIT_PRIVATE_KEY") ?: "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3"
     val evmKeyPair = WalletKeyPair.EVM.fromPrivateKeyHex(privateKey)
     val client =
         FunkybitApiClient(
