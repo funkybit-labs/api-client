@@ -18,8 +18,10 @@ import okhttp3.Response
 import org.http4k.client.WebsocketClient
 import org.http4k.websocket.WsClient
 import org.web3j.crypto.Credentials
+import xyz.funkybit.client.model.AccountConfigurationApiResponse
 import xyz.funkybit.client.model.ApiCallFailure
 import xyz.funkybit.client.model.ApiErrors
+import xyz.funkybit.client.model.AuthorizeWalletApiRequest
 import xyz.funkybit.client.model.BalancesApiResponse
 import xyz.funkybit.client.model.BatchOrdersApiRequest
 import xyz.funkybit.client.model.BatchOrdersApiResponse
@@ -337,6 +339,26 @@ class FunkybitApiClient(
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
 
+    fun tryAuthorizeWallet(apiRequest: AuthorizeWalletApiRequest): Either<ApiCallFailure, Unit> =
+        execute(
+            Request
+                .Builder()
+                .url("$apiServerRootUrl/v1/wallets/authorize")
+                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .build()
+                .withAuthHeaders(authToken),
+        ).toErrorOrUnit(expectedStatusCode = HttpURLConnection.HTTP_NO_CONTENT)
+
+    fun tryGetAccountConfiguration(): Either<ApiCallFailure, AccountConfigurationApiResponse> =
+        execute(
+            Request
+                .Builder()
+                .url("$apiServerRootUrl/v1/account-config")
+                .get()
+                .build()
+                .withAuthHeaders(authToken),
+        ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
+
     fun getConfiguration(): ConfigurationApiResponse = tryGetConfiguration().throwOrReturn()
 
     fun createOrder(apiRequest: CreateOrderApiRequest): CreateOrderApiResponse = tryCreateOrder(apiRequest).throwOrReturn()
@@ -373,6 +395,10 @@ class FunkybitApiClient(
     fun listWithdrawals(): ListWithdrawalsApiResponse = tryListWithdrawals().throwOrReturn()
 
     fun getBalances(): BalancesApiResponse = tryGetBalances().throwOrReturn()
+
+    fun authorizeWallet(apiRequest: AuthorizeWalletApiRequest) = tryAuthorizeWallet(apiRequest).throwOrReturn()
+
+    fun getAccountConfiguration() = tryGetAccountConfiguration().throwOrReturn()
 
     // Helper methods
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()

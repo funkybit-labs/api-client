@@ -91,3 +91,46 @@ value class DepositId(
 value class WithdrawalId(
     val value: String,
 )
+
+@Serializable
+@JvmInline
+value class BlockHash(
+    val value: String,
+)
+
+@Serializable(with = BitcoinRpcParamsSerializer::class)
+@JvmInline
+value class BitcoinRpcParams(
+    val value: Any,
+)
+
+@Serializable
+@JvmInline
+value class BitcoinUtxoId(
+    val value: String,
+) {
+    init {
+        require(value.split(":").size == 2) {
+            "Invalid utxoId format"
+        }
+    }
+
+    companion object {
+        fun fromTxHashAndVout(
+            txId: TxHash,
+            vout: Long,
+        ): BitcoinUtxoId = BitcoinUtxoId("$txId:$vout")
+    }
+
+    fun txId(): TxHash = TxHash.auto(value.split(":")[0])
+
+    fun vout(): Long = value.split(":")[1].toLong()
+
+    override fun toString(): String = value
+}
+
+@JvmInline
+@Serializable
+value class UserId(
+    val value: String,
+)

@@ -2,13 +2,17 @@ package xyz.funkybit.client.example
 
 import org.http4k.websocket.WsClient
 import org.http4k.websocket.WsStatus
+import xyz.funkybit.client.BitcoinWallet
 import xyz.funkybit.client.FunkybitApiClient
 import xyz.funkybit.client.Wallet
 import xyz.funkybit.client.WalletKeyPair
+import xyz.funkybit.client.bitcoinConfig
 import xyz.funkybit.client.model.AssetAmount
 import xyz.funkybit.client.model.BalanceType
 import xyz.funkybit.client.model.Balances
 import xyz.funkybit.client.model.BalancesUpdated
+import xyz.funkybit.client.model.Chain
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.ClientOrderId
 import xyz.funkybit.client.model.CreateOrderApiRequest
 import xyz.funkybit.client.model.ExecutionRole
@@ -26,6 +30,7 @@ import xyz.funkybit.client.model.Publishable
 import xyz.funkybit.client.model.SettlementStatus
 import xyz.funkybit.client.model.SubscriptionTopic
 import xyz.funkybit.client.model.SymbolInfo
+import xyz.funkybit.client.model.address.EvmAddress
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.receivedDecoded
 import xyz.funkybit.client.subscribeToBalances
@@ -41,30 +46,65 @@ import java.math.BigInteger
  * Example demonstrating how to use the FunkyBit API client
  */
 fun main() {
+    val endpoint = "http://localhost:9000"
     val base = "BTC"
-    val quote = "ETH"
+    val baseIsOnBitcoin = false
+    val quote = "BTC"
+    val quoteIsOnBitcoin = true
     val makerBaseAmount = "0.0001"
-    val price = "50"
-    val takerQuoteAmount = "0.002"
+    val price = "1.0"
+    val takerQuoteAmount = "0.0001"
     // Create a client with a wallet
     val privateKey = "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3" // Example key - replace with your own
-    val keyPair = WalletKeyPair.EVM.fromPrivateKeyHex(privateKey)
+    val evmKeyPair = WalletKeyPair.EVM.fromPrivateKeyHex(privateKey)
     val client =
         FunkybitApiClient(
-            keyPair = keyPair,
-            apiUrl = "http://localhost:9000", // Update to the correct API URL
+            keyPair = evmKeyPair,
+            apiUrl = endpoint,
         )
     val wallet = Wallet(client)
     println("Connected with address: ${client.address}")
+
+    val config = client.getConfiguration()
+    val accountConfig = client.getAccountConfiguration()
+
+    // authorize bitcoin wallet
+    val btcKeyPair = WalletKeyPair.Bitcoin.fromPrivateKeyHex(privateKey, bitcoinConfig.params)
+    val bitcoinClient = FunkybitApiClient(keyPair = btcKeyPair, apiUrl = endpoint, chainId = Chain.Id(BITCOIN))
+    val bitcoinWallet = BitcoinWallet(btcKeyPair, config.chains, bitcoinClient)
+    bitcoinClient.authorizeWallet(
+        bitcoinWallet.signAuthorizeBitcoinWalletRequest(
+            evmKeyPair.ecKeyPair,
+            client.address as EvmAddress,
+            bitcoinWallet.walletAddress,
+            wallet.currentChainId,
+        ),
+    )
 
     // Connect to WebSocket for real-time updates
     val webSocket = client.newWebSocket(client.authToken)
 
     try {
-        val config = client.getConfiguration()
         val evmChain = config.evmChains.first()
-        val baseSymbol = evmChain.symbols.first { it.name == "$base:${evmChain.id.value}" }
-        val quoteSymbol = evmChain.symbols.first { it.name == "$quote:${evmChain.id.value}" }
+        client.switchChain(evmChain.id)
+        val baseSymbol =
+            if (baseIsOnBitcoin) {
+                config.bitcoinChain.symbols.first { it.name == "$base:$BITCOIN" }
+            } else {
+                evmChain.symbols.first {
+                    it.name ==
+                        "$base:${evmChain.id.value}"
+                }
+            }
+        val quoteSymbol =
+            if (quoteIsOnBitcoin) {
+                config.bitcoinChain.symbols.first { it.name == "$quote:$BITCOIN" }
+            } else {
+                evmChain.symbols.first {
+                    it.name ==
+                        "$quote:${evmChain.id.value}"
+                }
+            }
 
         // Subscribe to balance updates before deposit
         webSocket.subscribeToBalances()
@@ -79,9 +119,15 @@ fun main() {
         // Deposit base for the limit sell
         val walletBaseBalance = wallet.getWalletBalance(baseSymbol)
         if (walletBaseBalance.amount < makerBaseAmount.toBigDecimal()) {
-            throw RuntimeException("Need at least $makerBaseAmount $base in ${client.address} on chain ${evmChain.id}")
+            throw RuntimeException(
+                "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id.value}",
+            )
         }
-        wallet.deposit(AssetAmount(baseSymbol, makerBaseAmount))
+        if (baseIsOnBitcoin) {
+            bitcoinWallet.depositNative(makerBaseAmount.toFundamentalUnits(8))
+        } else {
+            wallet.deposit(AssetAmount(baseSymbol, makerBaseAmount))
+        }
         println("Deposited $makerBaseAmount $base")
 
         // Wait for base balance to increase
@@ -111,7 +157,7 @@ fun main() {
                 signature = EvmSignature.emptySignature(),
                 nonce = generateOrderNonce(),
                 clientOrderId = ClientOrderId("example-sell-${System.currentTimeMillis()}"),
-                signingAddress = keyPair.address().value,
+                signingAddress = evmKeyPair.address().value,
                 verifyingChainId = evmChain.id,
                 captchaToken = "recaptcha-token",
             )
@@ -126,10 +172,16 @@ fun main() {
         waitForOrderCreated(webSocket, sellResponse.order.clientOrderId)
         val walletQuoteBalance = wallet.getWalletBalance(quoteSymbol)
         if (walletQuoteBalance.amount < takerQuoteAmount.toBigDecimal()) {
-            throw RuntimeException("Need at least $takerQuoteAmount $quote in ${client.address} on chain ${evmChain.id}")
+            throw RuntimeException(
+                "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id.value}",
+            )
         }
         // Deposit quote for the market buy
-        wallet.deposit(AssetAmount(quoteSymbol, takerQuoteAmount))
+        if (quoteIsOnBitcoin) {
+            bitcoinWallet.depositNative(takerQuoteAmount.toFundamentalUnits(8))
+        } else {
+            wallet.deposit(AssetAmount(quoteSymbol, takerQuoteAmount))
+        }
         println("Deposited $takerQuoteAmount $quote")
 
         // Subscribe to balance updates for quote deposit
@@ -168,7 +220,7 @@ fun main() {
                 signature = EvmSignature.emptySignature(),
                 nonce = generateOrderNonce(),
                 clientOrderId = ClientOrderId("example-market-buy-${System.currentTimeMillis()}"),
-                signingAddress = keyPair.address().value,
+                signingAddress = evmKeyPair.address().value,
                 verifyingChainId = evmChain.id,
                 captchaToken = "recaptcha-token",
             )
@@ -263,7 +315,11 @@ fun main() {
             val balance = balances.first { it.symbol.value == symbol.name }
             if (balance.available > BigInteger.ZERO) {
                 println("Withdrawing ${balance.available} ${balance.symbol}")
-                wallet.withdraw(AssetAmount(symbol, balance.available))
+                if ((baseIsOnBitcoin && symbol == baseSymbol) || (quoteIsOnBitcoin && symbol == quoteSymbol)) {
+                    bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol.name, balance.available, 8U))
+                } else {
+                    wallet.withdraw(AssetAmount(symbol, balance.available))
+                }
             }
         }
         println("All withdrawal requests sent")

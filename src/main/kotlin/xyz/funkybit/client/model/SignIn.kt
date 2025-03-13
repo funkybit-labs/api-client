@@ -1,6 +1,7 @@
 package xyz.funkybit.client.model
 
 import kotlinx.serialization.Serializable
+import xyz.funkybit.client.model.address.Address
 
 @Serializable
 data class SignInMessage(
@@ -31,4 +32,13 @@ data class AuthorizeWalletAddressMessage(
     val address: String,
     val chainId: Chain.Id,
     val timestamp: String,
+)
+
+@Serializable
+data class AuthorizeWalletApiRequest(
+    val authorizedAddress: Address,
+    val chainId: Chain.Id,
+    val address: Address,
+    val timestamp: String,
+    val signature: String,
 )
