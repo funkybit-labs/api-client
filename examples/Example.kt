@@ -43,7 +43,7 @@ import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
- * Example demonstrating how to use the FunkyBit API client
+ * Example demonstrating how to use the funkybit API client
  */
 fun main() {
     val endpoint = "https://prod-api.funkybit.fun"

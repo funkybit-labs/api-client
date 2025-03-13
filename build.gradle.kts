@@ -61,7 +61,7 @@ tasks.withType<KotlinCompile> {
 
 // Add task to run the example
 tasks.register<JavaExec>("runExample") {
-    description = "Run the FunkyBit API client example"
+    description = "Run the funkybit API client example"
     mainClass.set("xyz.funkybit.client.example.ExampleKt")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = projectDir
