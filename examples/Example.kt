@@ -46,7 +46,7 @@ import java.math.BigInteger
  * Example demonstrating how to use the FunkyBit API client
  */
 fun main() {
-    val endpoint = "http://localhost:9000"
+    val endpoint = "https://prod-api.funkybit.fun"
     val base = "BTC"
     val baseIsOnBitcoin = false
     val quote = "BTC"
