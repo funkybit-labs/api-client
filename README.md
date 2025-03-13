@@ -11,8 +11,7 @@ This example demonstrates how to use the funkybit API client to:
 ## Prerequisites
 
 - Java 17 or higher
-- Gradle 7.0 or higher
-- A running instance of the funkybit API server (default: https://prod-api.funkybit.fun)
+- Gradle 8.0 or higher
 - EVM private key with sufficient funds for deposits and gas fees
 - Bitcoin private key with sufficient funds (if trading Bitcoin)
 
