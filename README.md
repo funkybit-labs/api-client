@@ -38,7 +38,7 @@ FUNKYBIT_API_URL=https://prod-api.funkybit.fun  # API endpoint URL
 FUNKYBIT_PRIVATE_KEY=0x...
 
 # Bitcoin Network Configuration
-BITCOIN_NETWORK_NAME=org.bitcoin.regtest  # Bitcoin network name
+BITCOIN_NETWORK_NAME=org.bitcoin.production  # Bitcoin network name
 BITCOIN_MIN_FEE_VALUE=5                # Minimum fee value in satoshis
 BITCOIN_MAX_FEE_VALUE=50               # Maximum fee value in satoshis
 BITCOIN_CHANGE_DUST_THRESHOLD=546      # Change dust threshold in satoshis

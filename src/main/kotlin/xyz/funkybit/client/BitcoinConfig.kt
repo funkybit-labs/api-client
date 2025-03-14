@@ -30,7 +30,7 @@ data class BitcoinConfig(
 
 val bitcoinConfig =
     BitcoinConfig(
-        net = System.getenv("BITCOIN_NETWORK_NAME") ?: "org.bitcoin.regtest",
+        net = System.getenv("BITCOIN_NETWORK_NAME") ?: "org.bitcoin.production",
         feeSettings =
             BitcoinConfig.FeeEstimationSettings(
                 blocks = 1,
