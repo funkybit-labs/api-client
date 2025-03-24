@@ -40,7 +40,7 @@ sealed class OrderAmount {
 
     fun percentage(): Int? =
         when (this) {
-            is Percent -> this.value.value
+            is Percent -> this.value
             else -> null
         }
 }
@@ -90,7 +90,7 @@ sealed class CreateOrderApiRequest {
     abstract val amount: OrderAmount
     abstract val signature: Signature
     abstract val signingAddress: String
-    abstract val verifyingChainId: Chain.Id
+    abstract val verifyingChainId: String
     abstract val clientOrderId: ClientOrderId
     abstract val captchaToken: String?
 
@@ -103,7 +103,7 @@ sealed class CreateOrderApiRequest {
         override val amount: OrderAmount,
         override val signature: Signature,
         override val signingAddress: String,
-        override val verifyingChainId: Chain.Id,
+        override val verifyingChainId: String,
         override val clientOrderId: ClientOrderId,
         override val captchaToken: String? = null,
         val slippageTolerance: OrderSlippageTolerance? = null,
@@ -120,7 +120,7 @@ sealed class CreateOrderApiRequest {
         override val amount: OrderAmount,
         override val signature: Signature,
         override val signingAddress: String,
-        override val verifyingChainId: Chain.Id,
+        override val verifyingChainId: String,
         override val clientOrderId: ClientOrderId,
         override val captchaToken: String? = null,
     ) : CreateOrderApiRequest()
@@ -135,7 +135,7 @@ sealed class CreateOrderApiRequest {
         val price: BigDecimalJson,
         override val signature: Signature,
         override val signingAddress: String,
-        override val verifyingChainId: Chain.Id,
+        override val verifyingChainId: String,
         override val clientOrderId: ClientOrderId,
         override val captchaToken: String? = null,
     ) : CreateOrderApiRequest()
@@ -165,7 +165,7 @@ data class CancelOrderApiRequest(
     val nonce: String,
     val signature: Signature,
     val signingAddress: String,
-    val verifyingChainId: Chain.Id,
+    val verifyingChainId: String,
 )
 
 @Serializable

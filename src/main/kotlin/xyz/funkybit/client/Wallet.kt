@@ -7,7 +7,7 @@ import org.web3j.protocol.core.methods.response.TransactionReceipt
 import xyz.funkybit.client.model.AssetAmount
 import xyz.funkybit.client.model.CancelOrderApiRequest
 import xyz.funkybit.client.model.Chain
-import xyz.funkybit.client.model.ChainId
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.CreateDepositApiRequest
 import xyz.funkybit.client.model.CreateOrderApiRequest
 import xyz.funkybit.client.model.CreateWithdrawalApiRequest
@@ -15,12 +15,12 @@ import xyz.funkybit.client.model.EIP712Transaction
 import xyz.funkybit.client.model.MarketId
 import xyz.funkybit.client.model.OrderAmount
 import xyz.funkybit.client.model.OrderSide
-import xyz.funkybit.client.model.Symbol
 import xyz.funkybit.client.model.SymbolInfo
 import xyz.funkybit.client.model.TokenAddressAndChain
 import xyz.funkybit.client.model.TxHash
 import xyz.funkybit.client.model.address.Address
 import xyz.funkybit.client.model.address.EvmAddress
+import xyz.funkybit.client.model.baseAndQuoteSymbols
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.model.signature.toEvmSignature
 import xyz.funkybit.client.utils.EIP712Helper
@@ -67,8 +67,8 @@ class Wallet(
         }
     }
 
-    val chains = allChains.filter { it.id.isEvm() }
-    private val bitcoinChain = allChains.first { it.id.isBitcoin() }
+    val chains = allChains.filter { it.id != BITCOIN }
+    private val bitcoinChain = allChains.first { it.id == BITCOIN }
 
     private val evmClients =
         chains.map {
@@ -91,9 +91,9 @@ class Wallet(
             )
         }
 
-    private val evmClientsByChainId = evmClients.associateBy { Chain.Id(it.chainId) }
+    private val evmClientsByChainId = evmClients.associateBy { it.chainId }
 
-    var currentChainId: Chain.Id = Chain.Id(evmClients.first().chainId)
+    var currentChainId: String = evmClients.first().chainId
 
     val evmAddress = keyPair.address()
 
@@ -109,23 +109,17 @@ class Wallet(
         }
     private val exchangeContractByChainId =
         evmClients.associate {
-            val chainId = Chain.Id(it.chainId)
+            val chainId = it.chainId
             chainId to it.loadExchangeContract(exchangeContractAddressByChainId.getValue(chainId))
         }
 
-    fun switchChain(chainId: ChainId) {
-        currentChainId = Chain.Id(chainId)
-    }
-
-    fun switchChain(chainId: Chain.Id) {
+    fun switchChain(chainId: String) {
         currentChainId = chainId
     }
 
     fun currentEvmClient(): EvmClient = evmClientsByChainId.getValue(currentChainId)
 
     fun waitForTransactionReceipt(txHash: TxHash): TransactionReceipt = currentEvmClient().waitForTransactionReceipt(txHash)
-
-    fun getWalletERC20Balance(symbol: Symbol): BigInteger = loadErc20Contract(symbol.value).balanceOf(evmAddress.value).send()
 
     fun getWalletERC20Balance(symbol: String): BigInteger = loadErc20Contract(symbol).balanceOf(evmAddress.value).send()
 
@@ -168,7 +162,7 @@ class Wallet(
         val txHash = sendDepositTx(assetAmount)
         apiClient.createDeposit(
             CreateDepositApiRequest(
-                symbol = Symbol(assetAmount.symbol.name),
+                symbol = assetAmount.symbol.name,
                 amount = assetAmount.inFundamentalUnits,
                 txHash = txHash,
             ),
@@ -243,7 +237,7 @@ class Wallet(
                 EvmSignature.emptySignature(),
             )
         return CreateWithdrawalApiRequest(
-            Symbol(symbol),
+            symbol,
             amount,
             nonce,
             evmClientsByChainId.getValue(currentChainId).signData(
@@ -376,7 +370,7 @@ class Wallet(
 
     private fun erc20TokenAddress(
         symbol: String,
-        chainId: Chain.Id,
+        chainId: String,
     ): String? =
         chains
             .first { it.id == chainId }
@@ -388,8 +382,7 @@ class Wallet(
             ?.toString()
 
     private fun marketSymbols(marketId: MarketId): Pair<SymbolInfo, SymbolInfo> =
-        marketId
-            .baseAndQuoteSymbols()
+        baseAndQuoteSymbols(marketId)
             .let { (base, quote) ->
                 Pair(
                     allChains.map { it.symbols.filter { s -> s.name == base } }.flatten().first(),

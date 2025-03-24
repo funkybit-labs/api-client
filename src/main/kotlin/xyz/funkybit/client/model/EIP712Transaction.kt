@@ -11,6 +11,7 @@ import org.web3j.abi.datatypes.StaticStruct
 import org.web3j.abi.datatypes.generated.Uint256
 import org.web3j.abi.datatypes.generated.Uint64
 import org.web3j.crypto.StructuredData
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.address.Address
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.utils.BigIntegerJson
@@ -28,10 +29,8 @@ enum class EIP712TransactionType {
 @Serializable
 data class TokenAddressAndChain(
     val address: Address,
-    val chainId: Chain.Id,
-) {
-    constructor(address: Address, chainId: ChainId) : this(address, Chain.Id(chainId))
-}
+    val chainId: String,
+)
 
 @Serializable
 @OptIn(ExperimentalSerializationApi::class)
@@ -117,9 +116,9 @@ sealed class EIP712Transaction {
     @SerialName("order")
     data class Order(
         val sender: String,
-        val baseChainId: Chain.Id,
+        val baseChainId: String,
         val baseToken: String,
-        val quoteChainId: Chain.Id,
+        val quoteChainId: String,
         val quoteToken: String,
         val amount: OrderAmount,
         val price: BigIntegerJson,
@@ -148,7 +147,7 @@ sealed class EIP712Transaction {
             )
 
         override fun getMessage(): Map<String, String> {
-            fun formatChainId(chainId: Chain.Id): String = if (chainId.isBitcoin()) "0" else chainId.value
+            fun formatChainId(chainId: String): String = if (chainId == BITCOIN) "0" else chainId
 
             return mapOf(
                 "sender" to sender,
@@ -158,7 +157,7 @@ sealed class EIP712Transaction {
                 "quoteToken" to quoteToken,
                 when (amount) {
                     is OrderAmount.Fixed -> "amount" to amount.value.toString()
-                    is OrderAmount.Percent -> "percentage" to amount.value.value.toString()
+                    is OrderAmount.Percent -> "percentage" to amount.value.toString()
                 },
                 "price" to price.toString(),
                 "nonce" to nonce.toString(),
@@ -190,7 +189,7 @@ sealed class EIP712Transaction {
         override fun getMessage(): Map<String, String> =
             mapOf(
                 "sender" to sender,
-                "marketId" to marketId.value,
+                "marketId" to marketId,
                 "amount" to amount.toString(),
                 "nonce" to nonce.toString(),
             )

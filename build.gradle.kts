@@ -19,6 +19,9 @@ sourceSets {
         kotlin {
             srcDirs("src/main/kotlin", "examples")
         }
+        java {
+            srcDirs("examples")
+        }
     }
 }
 
@@ -59,10 +62,18 @@ tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
 }
 
-// Add task to run the example
+// Add task to run the Kotlin example
 tasks.register<JavaExec>("runExample") {
-    description = "Run the funkybit API client example"
+    description = "Run the funkybit API client Kotlin example"
     mainClass.set("xyz.funkybit.client.example.ExampleKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = projectDir
+}
+
+// Add task to run the Java example
+tasks.register<JavaExec>("runJavaExample") {
+    description = "Run the funkybit API client Java example"
+    mainClass.set("FunkybitClientExample")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = projectDir
 }

@@ -26,8 +26,7 @@ import xyz.funkybit.client.model.BalancesApiResponse
 import xyz.funkybit.client.model.BatchOrdersApiRequest
 import xyz.funkybit.client.model.BatchOrdersApiResponse
 import xyz.funkybit.client.model.CancelOrderApiRequest
-import xyz.funkybit.client.model.Chain
-import xyz.funkybit.client.model.ClientOrderId
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.ConfigurationApiResponse
 import xyz.funkybit.client.model.CreateDepositApiRequest
 import xyz.funkybit.client.model.CreateOrderApiRequest
@@ -54,16 +53,17 @@ import java.net.HttpURLConnection
 class FunkybitApiClient(
     val keyPair: WalletKeyPair = WalletKeyPair.EVM.generate(),
     apiUrl: String = DEFAULT_API_URL,
-    chainId: Chain.Id = Chain.Id("1337"),
+    chainId: String = "1337",
     val sessionKeyPair: WalletKeyPair = WalletKeyPair.EVM.generate(),
 ) {
     private val apiServerRootUrl = apiUrl
-    private var currentChainId: Chain.Id = chainId
+    private var currentChainId: String = chainId
     var authToken: String =
         issueAuthToken(keyPair = keyPair, chainId = currentChainId, sessionKeyAddress = sessionKeyPair.address().canonicalize().toString())
     val address = keyPair.address()
 
     companion object {
+        @JvmStatic
         val DEFAULT_API_URL = System.getenv("FUNKYBIT_API_URL") ?: "https://prod-api.funkybit.fun"
 
         val httpClient =
@@ -86,7 +86,7 @@ class FunkybitApiClient(
             .apply {
                 addQueryParameter("statuses", statuses.joinToString(","))
                 marketId?.let {
-                    addQueryParameter("marketId", it.value)
+                    addQueryParameter("marketId", it)
                 }
             }.build()
 
@@ -101,7 +101,7 @@ class FunkybitApiClient(
         fun issueAuthToken(
             keyPair: WalletKeyPair = WalletKeyPair.EVM.generate(),
             address: String = keyPair.address().canonicalize().toString(),
-            chainId: Chain.Id = Chain.Id("1337"),
+            chainId: String = "1337",
             timestamp: Instant = Clock.System.now(),
             sessionKeyAddress: String = keyPair.address().canonicalize().toString(),
         ): String {
@@ -111,7 +111,7 @@ class FunkybitApiClient(
                         "[funkybit] Please sign this message to verify your ownership of this wallet address." +
                             " This action will not cost any gas fees.",
                     address = address,
-                    chainId = chainId.toDbId().toLong(),
+                    chainId = if (chainId == BITCOIN) 0L else chainId.toLong(),
                     timestamp = timestamp.toString(),
                     sessionKeyAddress = sessionKeyAddress,
                     ordinalsAddress = null,
@@ -144,7 +144,7 @@ class FunkybitApiClient(
 
     fun newWebSocket(authToken: String): WsClient = WebsocketClient.blocking(this.apiServerRootUrl, authToken)
 
-    fun switchChain(chainId: Chain.Id) {
+    fun switchChain(chainId: String) {
         currentChainId = chainId
         reissueAuthToken()
     }
@@ -207,16 +207,6 @@ class FunkybitApiClient(
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(HttpURLConnection.HTTP_OK)
 
-    fun tryGetOrder(id: ClientOrderId): Either<ApiCallFailure, Order> =
-        execute(
-            Request
-                .Builder()
-                .url("$apiServerRootUrl/v1/orders/external:$id")
-                .get()
-                .build()
-                .withAuthHeaders(authToken),
-        ).toErrorOrPayload(HttpURLConnection.HTTP_OK)
-
     fun tryListOrders(
         statuses: List<OrderStatus> = emptyList(),
         marketId: MarketId? = null,
@@ -253,7 +243,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url(
-                    "$apiServerRootUrl/v1/order-book".toHttpUrl().newBuilder().addPathSegment(marketId.value).build(),
+                    "$apiServerRootUrl/v1/order-book".toHttpUrl().newBuilder().addPathSegment(marketId).build(),
                 ).get()
                 .build()
                 .withAuthHeaders(authToken),
@@ -368,8 +358,6 @@ class FunkybitApiClient(
     fun cancelOrder(apiRequest: CancelOrderApiRequest) = tryCancelOrder(apiRequest).throwOrReturn()
 
     fun getOrder(id: OrderId): Order = tryGetOrder(id).throwOrReturn()
-
-    fun getOrder(id: ClientOrderId): Order = tryGetOrder(id).throwOrReturn()
 
     fun listOrders(
         statuses: List<OrderStatus> = emptyList(),

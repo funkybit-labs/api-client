@@ -80,38 +80,11 @@ data class DeployedContract(
 
 @Serializable
 data class Chain(
-    val id: Id,
+    val id: String,
     val name: String,
     val contracts: List<DeployedContract>,
     val symbols: List<SymbolInfo>,
     val jsonRpcUrl: String,
     val blockExplorerNetName: String,
     val blockExplorerUrl: String,
-) {
-    @Serializable
-    @JvmInline
-    value class Id(
-        val value: String,
-    ) {
-        override fun toString(): String = value
-
-        fun isEvm(): Boolean = !isBitcoin()
-
-        fun isBitcoin(): Boolean = value == ChainId.BITCOIN
-
-        fun toDbId(): ChainId =
-            when {
-                value == ChainId.BITCOIN -> ChainId.Bitcoin
-                value.toLongOrNull() != null -> ChainId.Evm(value)
-                else -> throw RuntimeException("Can't convert $value to ChainId")
-            }
-
-        companion object {
-            operator fun invoke(id: ChainId): Id =
-                when (id) {
-                    is ChainId.Bitcoin, is ChainId.Evm -> Id(id.value)
-                    else -> throw RuntimeException("Unexpected chain id: $id")
-                }
-        }
-    }
-}
+)

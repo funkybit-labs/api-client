@@ -11,6 +11,7 @@ import xyz.funkybit.client.model.AuthorizeWalletApiRequest
 import xyz.funkybit.client.model.BitcoinUtxoId
 import xyz.funkybit.client.model.CancelOrderApiRequest
 import xyz.funkybit.client.model.Chain
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.CreateDepositApiRequest
 import xyz.funkybit.client.model.CreateOrderApiRequest
 import xyz.funkybit.client.model.CreateWithdrawalApiRequest
@@ -19,12 +20,12 @@ import xyz.funkybit.client.model.EIP712Transaction
 import xyz.funkybit.client.model.MarketId
 import xyz.funkybit.client.model.OrderAmount
 import xyz.funkybit.client.model.OrderSide
-import xyz.funkybit.client.model.Symbol
 import xyz.funkybit.client.model.SymbolInfo
 import xyz.funkybit.client.model.TxHash
 import xyz.funkybit.client.model.UnspentUtxo
 import xyz.funkybit.client.model.address.BitcoinAddress
 import xyz.funkybit.client.model.address.EvmAddress
+import xyz.funkybit.client.model.baseAndQuoteSymbols
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.model.signature.Signature
 import xyz.funkybit.client.model.signature.toEvmSignature
@@ -55,7 +56,7 @@ class BitcoinWallet(
         }
     }
 
-    private val chain = allChains.first { it.id.isBitcoin() }
+    private val chain = allChains.first { it.id == BITCOIN }
     val walletAddress = keyPair.address()
 
     val exchangeNativeDepositAddress =
@@ -83,15 +84,14 @@ class BitcoinWallet(
     fun depositNative(amount: BigInteger): DepositApiResponse =
         apiClient.createDeposit(
             CreateDepositApiRequest(
-                symbol = Symbol(nativeSymbol.name),
+                symbol = nativeSymbol.name,
                 amount = amount,
                 txHash = sendNativeDepositTx(amount),
             ),
         )
 
     private fun marketSymbols(marketId: MarketId): Pair<SymbolInfo, SymbolInfo> =
-        marketId
-            .baseAndQuoteSymbols()
+        baseAndQuoteSymbols(marketId)
             .let { (base, quote) ->
                 Pair(
                     allChains.map { it.symbols.filter { s -> s.name == base } }.flatten().first(),
@@ -128,7 +128,7 @@ class BitcoinWallet(
     fun signWithdraw(
         symbol: String,
         amount: BigInteger,
-        decimals: UByte? = null,
+        decimals: Int? = null,
     ): CreateWithdrawalApiRequest {
         val nonce = System.currentTimeMillis()
         val message = "[funkybit] Please sign this message to authorize withdrawal of ${if (amount == BigInteger.ZERO) {
@@ -136,13 +136,13 @@ class BitcoinWallet(
         } else {
             amount
                 .fromFundamentalUnits(
-                    decimals ?: 8u,
+                    decimals?.toUByte() ?: 8u,
                 ).toPlainString()
         }} $symbol from the exchange to your wallet."
         val bitcoinLinkAddressMessage = "$message\nAddress: ${walletAddress.value}, Timestamp: ${Instant.fromEpochMilliseconds(nonce)}"
         val signature = keyPair.ecKey.signMessage(bitcoinLinkAddressMessage)
         return CreateWithdrawalApiRequest(
-            Symbol(symbol),
+            symbol,
             amount,
             nonce,
             Signature.auto(signature),
@@ -178,7 +178,7 @@ class BitcoinWallet(
         return (signature.r + signature.s + signature.v).toHex().toEvmSignature()
     }
 
-    val evmChains = allChains.filter { it.id.isEvm() }
+    val evmChains = allChains.filter { it.id != BITCOIN }
     private val evmExchangeContractAddressByChainId =
         evmChains.associate {
             it.id to
@@ -285,7 +285,7 @@ class BitcoinWallet(
         ecKeyPair: ECKeyPair,
         address: EvmAddress,
         authorizedAddress: BitcoinAddress,
-        chainId: Chain.Id = Chain.Id("1337"),
+        chainId: String = "1337",
         timestamp: Instant = Clock.System.now(),
     ): AuthorizeWalletApiRequest {
         val message =

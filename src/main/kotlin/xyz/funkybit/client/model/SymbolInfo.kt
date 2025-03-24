@@ -9,10 +9,10 @@ data class SymbolInfo(
     val name: String,
     val description: String,
     val contractAddress: Address?,
-    val decimals: UByte,
+    val decimals: Int,
     val faucetSupported: Boolean,
     val iconUrl: String,
     val withdrawalFee: BigIntegerJson,
-    val chainId: Chain.Id,
+    val chainId: String,
     val chainName: String,
 )

@@ -226,7 +226,7 @@ class MempoolSpaceClient(
         execute(
             Request
                 .Builder()
-                .url("$apiServerRootUrl/block/${blockHash.value}".toHttpUrl().newBuilder().build())
+                .url("$apiServerRootUrl/block/$blockHash".toHttpUrl().newBuilder().build())
                 .get()
                 .build(),
         ).toPayload()
@@ -235,7 +235,7 @@ class MempoolSpaceClient(
         execute(
             Request
                 .Builder()
-                .url("$apiServerRootUrl/block/${blockHash.value}/txids".toHttpUrl().newBuilder().build())
+                .url("$apiServerRootUrl/block/$blockHash/txids".toHttpUrl().newBuilder().build())
                 .get()
                 .build(),
         ).toPayload()
@@ -247,7 +247,7 @@ class MempoolSpaceClient(
         execute(
             Request
                 .Builder()
-                .url("$apiServerRootUrl/block/${blockHash.value}/txid/$index".toHttpUrl().newBuilder().build())
+                .url("$apiServerRootUrl/block/$blockHash/txid/$index".toHttpUrl().newBuilder().build())
                 .get()
                 .build(),
         ).toPayload()

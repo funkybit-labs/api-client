@@ -4,6 +4,7 @@ import org.http4k.websocket.WsClient
 import org.http4k.websocket.WsStatus
 import xyz.funkybit.client.BitcoinWallet
 import xyz.funkybit.client.FunkybitApiClient
+import xyz.funkybit.client.FunkybitApiClient.Companion.DEFAULT_API_URL
 import xyz.funkybit.client.Wallet
 import xyz.funkybit.client.WalletKeyPair
 import xyz.funkybit.client.bitcoinConfig
@@ -11,7 +12,6 @@ import xyz.funkybit.client.model.AssetAmount
 import xyz.funkybit.client.model.BalanceType
 import xyz.funkybit.client.model.Balances
 import xyz.funkybit.client.model.BalancesUpdated
-import xyz.funkybit.client.model.Chain
 import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.ClientOrderId
 import xyz.funkybit.client.model.CreateOrderApiRequest
@@ -46,11 +46,11 @@ import java.math.BigInteger
  * Example demonstrating how to use the funkybit API client
  */
 fun main() {
-    val endpoint = FunkybitApiClient.DEFAULT_API_URL
+    val endpoint = DEFAULT_API_URL
     val base = "BTC"
-    val baseIsOnBitcoin = false
-    val quote = "BTC"
-    val quoteIsOnBitcoin = true
+    val baseIsOnBitcoin = true
+    val quote = "USDC"
+    val quoteIsOnBitcoin = false
     val makerBaseAmount = "0.0001"
     val price = "1.0"
     val takerQuoteAmount = "0.0001"
@@ -71,7 +71,7 @@ fun main() {
 
     // authorize bitcoin wallet
     val btcKeyPair = WalletKeyPair.Bitcoin.fromPrivateKeyHex(privateKey, bitcoinConfig.params)
-    val bitcoinClient = FunkybitApiClient(keyPair = btcKeyPair, apiUrl = endpoint, chainId = Chain.Id(BITCOIN))
+    val bitcoinClient = FunkybitApiClient(keyPair = btcKeyPair, apiUrl = endpoint, chainId = BITCOIN)
     val bitcoinWallet = BitcoinWallet(btcKeyPair, config.chains, bitcoinClient)
     bitcoinClient.authorizeWallet(
         bitcoinWallet.signAuthorizeBitcoinWalletRequest(
@@ -81,6 +81,7 @@ fun main() {
             wallet.currentChainId,
         ),
     )
+    println("Bitcoin wallet ${bitcoinWallet.walletAddress} authorized")
 
     // Connect to WebSocket for real-time updates
     val webSocket = client.newWebSocket(client.authToken)
@@ -94,7 +95,7 @@ fun main() {
             } else {
                 evmChain.symbols.first {
                     it.name ==
-                        "$base:${evmChain.id.value}"
+                        "$base:${evmChain.id}"
                 }
             }
         val quoteSymbol =
@@ -103,7 +104,7 @@ fun main() {
             } else {
                 evmChain.symbols.first {
                     it.name ==
-                        "$quote:${evmChain.id.value}"
+                        "$quote:${evmChain.id}"
                 }
             }
 
@@ -114,14 +115,14 @@ fun main() {
 
         // Get initial base balance
         val initialBalances = client.getBalances().balances
-        val initialBaseBalance = initialBalances.firstOrNull { it.symbol.value == baseSymbol.name }?.available ?: BigInteger.ZERO
+        val initialBaseBalance = initialBalances.firstOrNull { it.symbol == baseSymbol.name }?.available ?: BigInteger.ZERO
         println("Initial $base balance: $initialBaseBalance")
 
         // Deposit base for the limit sell
         val walletBaseBalance = wallet.getWalletBalance(baseSymbol)
         if (walletBaseBalance.amount < makerBaseAmount.toBigDecimal()) {
             throw RuntimeException(
-                "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id.value}",
+                "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id}",
             )
         }
         if (baseIsOnBitcoin) {
@@ -145,7 +146,7 @@ fun main() {
 
         val market =
             config.markets.first {
-                it.baseSymbol.value == baseSymbol.name && it.quoteSymbol.value == quoteSymbol.name
+                it.baseSymbol == baseSymbol.name && it.quoteSymbol == quoteSymbol.name
             }
 
         // Place a limit sell order
@@ -157,7 +158,7 @@ fun main() {
                 price = price.toBigDecimal(),
                 signature = EvmSignature.emptySignature(),
                 nonce = generateOrderNonce(),
-                clientOrderId = ClientOrderId("example-sell-${System.currentTimeMillis()}"),
+                clientOrderId = "example-sell-${System.currentTimeMillis()}",
                 signingAddress = evmKeyPair.address().value,
                 verifyingChainId = evmChain.id,
                 captchaToken = "recaptcha-token",
@@ -174,7 +175,7 @@ fun main() {
         val walletQuoteBalance = wallet.getWalletBalance(quoteSymbol)
         if (walletQuoteBalance.amount < takerQuoteAmount.toBigDecimal()) {
             throw RuntimeException(
-                "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id.value}",
+                "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id}",
             )
         }
         // Deposit quote for the market buy
@@ -195,7 +196,7 @@ fun main() {
             client
                 .getBalances()
                 .balances
-                .firstOrNull { it.symbol.value == quoteSymbol.name }
+                .firstOrNull { it.symbol == quoteSymbol.name }
                 ?.available ?: BigInteger.ZERO
         println("Initial $quote balance: $initialQuoteBalance")
 
@@ -220,7 +221,7 @@ fun main() {
                     ),
                 signature = EvmSignature.emptySignature(),
                 nonce = generateOrderNonce(),
-                clientOrderId = ClientOrderId("example-market-buy-${System.currentTimeMillis()}"),
+                clientOrderId = "example-market-buy-${System.currentTimeMillis()}",
                 signingAddress = evmKeyPair.address().value,
                 verifyingChainId = evmChain.id,
                 captchaToken = "recaptcha-token",
@@ -313,11 +314,11 @@ fun main() {
         // Withdraw balances
         println("Withdrawing available balances...")
         listOf(baseSymbol, quoteSymbol).forEach { symbol ->
-            val balance = balances.first { it.symbol.value == symbol.name }
+            val balance = balances.first { it.symbol == symbol.name }
             if (balance.available > BigInteger.ZERO) {
                 println("Withdrawing ${balance.available} ${balance.symbol}")
                 if ((baseIsOnBitcoin && symbol == baseSymbol) || (quoteIsOnBitcoin && symbol == quoteSymbol)) {
-                    bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol.name, balance.available, 8U))
+                    bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol.name, balance.available, 8))
                 } else {
                     wallet.withdraw(AssetAmount(symbol, balance.available))
                 }
@@ -337,7 +338,7 @@ fun main() {
                         is BalancesUpdated -> {
                             publish.data.balances.forEach { balance ->
                                 println("Balance updated: ${balance.symbol}: ${balance.value} (${balance.type})")
-                                when (balance.symbol.value) {
+                                when (balance.symbol) {
                                     baseSymbol.name -> {
                                         if (balance.type == BalanceType.Available && balance.value == BigInteger.ZERO) {
                                             baseWithdrawn = true
@@ -440,7 +441,7 @@ private fun waitForBalanceIncrease(
             is OutgoingWSMessage.Publish -> {
                 when (publish.data) {
                     is BalancesUpdated -> {
-                        val balance = publish.data.balances.find { it.symbol.value == symbol.name }
+                        val balance = publish.data.balances.find { it.symbol == symbol.name }
                         if (balance != null && balance.type == BalanceType.Available) {
                             println("$symbol balance updated: ${balance.value}")
                             if (balance.value > initialBalance) {

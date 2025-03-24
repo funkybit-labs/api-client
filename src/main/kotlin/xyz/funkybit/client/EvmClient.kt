@@ -28,7 +28,6 @@ import org.web3j.tx.exceptions.ContractCallException
 import org.web3j.tx.response.PollingTransactionReceiptProcessor
 import org.web3j.utils.Async
 import org.web3j.utils.Numeric
-import xyz.funkybit.client.model.ChainId
 import xyz.funkybit.client.model.TxHash
 import xyz.funkybit.client.model.address.Address
 import xyz.funkybit.client.model.address.EvmAddress
@@ -132,7 +131,12 @@ open class EvmClient(
             Async.defaultExecutorService(),
         )
     protected val credentials = Credentials.create(config.privateKeyHex)
-    val chainId = ChainId.evm(web3j.ethChainId().send().chainId)
+    val chainId =
+        web3j
+            .ethChainId()
+            .send()
+            .chainId
+            .toString()
     protected val receiptProcessor =
         PollingTransactionReceiptProcessor(
             web3j,

@@ -4,7 +4,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.web3j.crypto.StructuredData
 import org.web3j.crypto.StructuredDataEncoder
 import xyz.funkybit.client.model.AuthorizeWalletAddressMessage
-import xyz.funkybit.client.model.Chain
 import xyz.funkybit.client.model.EIP712Transaction
 import xyz.funkybit.client.model.SignInMessage
 import xyz.funkybit.client.model.address.Address
@@ -14,7 +13,7 @@ object EIP712Helper {
 
     fun computeHash(
         tx: EIP712Transaction,
-        chainId: Chain.Id,
+        chainId: String,
         verifyingContract: Address,
     ): ByteArray {
         logger.debug { "computeHash($tx, $chainId, $verifyingContract)" }
@@ -47,7 +46,7 @@ object EIP712Helper {
                         // version =
                         "0.1.0",
                         // chainId =
-                        chainId.value,
+                        chainId,
                         // verifyingContract =
                         verifyingContract.toString(),
                         // salt =
@@ -144,7 +143,7 @@ object EIP712Helper {
                     "message" to authorizeMessage.message,
                     "address" to authorizeMessage.address,
                     "authorizedAddress" to authorizeMessage.authorizedAddress,
-                    "chainId" to authorizeMessage.chainId.value,
+                    "chainId" to authorizeMessage.chainId,
                     "timestamp" to authorizeMessage.timestamp,
                 ),
                 // domain =
@@ -154,7 +153,7 @@ object EIP712Helper {
                     // version =
                     null,
                     // chainId =
-                    authorizeMessage.chainId.value,
+                    authorizeMessage.chainId,
                     // verifyingContract =
                     null,
                     // salt =
