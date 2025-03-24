@@ -2,111 +2,27 @@ package xyz.funkybit.client.model
 
 import kotlinx.serialization.Serializable
 
-@JvmInline
-@Serializable
-value class SequencerAccountId(
-    val value: Long,
-)
+typealias MarketId = String
 
-@JvmInline
-@Serializable
-value class SequencerWalletId(
-    val value: Long,
-)
+fun baseAndQuoteSymbols(marketId: MarketId): Pair<String, String> = marketId.split('/', limit = 2).let { Pair(it[0], it[1]) }
 
-@JvmInline
-@Serializable
-value class SequencerOrderId(
-    val value: Long,
-)
-
-@Serializable
-@JvmInline
-value class MarketId(
-    val value: String,
-) {
-    override fun toString(): String = value
-
-    fun baseAndQuoteSymbols(): Pair<String, String> = this.value.split('/', limit = 2).let { Pair(it[0], it[1]) }
-
-    fun baseSymbol() = baseAndQuoteSymbols().first
-
-    fun quoteSymbol() = baseAndQuoteSymbols().second
-
-    fun hasSymbol(symbol: String) = baseAndQuoteSymbols().let { it.first == symbol || it.second == symbol }
-}
-
-@Serializable
-@JvmInline
-value class Symbol(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class TradeId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class Percentage(
-    val value: Int,
-) {
-    init {
-        require(value in 1..MAX_VALUE) { "Invalid percentage" }
-    }
-
-    companion object {
-        const val MAX_VALUE = 100
-    }
-}
-
-@Serializable
-@JvmInline
-value class ClientOrderId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class OrderId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class ExecutionId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class DepositId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class WithdrawalId(
-    val value: String,
-)
-
-@Serializable
-@JvmInline
-value class BlockHash(
-    val value: String,
-)
+typealias Symbol = String
+typealias TradeId = String
+typealias Percentage = Int
+typealias ClientOrderId = String
+typealias OrderId = String
+typealias DepositId = String
+typealias WithdrawalId = String
+typealias BlockHash = String
+typealias UserId = String
 
 @Serializable(with = BitcoinRpcParamsSerializer::class)
-@JvmInline
-value class BitcoinRpcParams(
+data class BitcoinRpcParams(
     val value: Any,
 )
 
 @Serializable
-@JvmInline
-value class BitcoinUtxoId(
+data class BitcoinUtxoId(
     val value: String,
 ) {
     init {
@@ -128,9 +44,3 @@ value class BitcoinUtxoId(
 
     override fun toString(): String = value
 }
-
-@JvmInline
-@Serializable
-value class UserId(
-    val value: String,
-)

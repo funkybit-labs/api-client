@@ -3,10 +3,8 @@ package xyz.funkybit.client.utils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.web3j.crypto.Credentials
 import org.web3j.crypto.ECDSASignature
-import org.web3j.crypto.Hash
 import org.web3j.crypto.Keys
 import org.web3j.crypto.Sign
-import xyz.funkybit.client.model.SequencerOrderId
 import xyz.funkybit.client.model.address.EvmAddress
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.model.signature.toEvmSignature
@@ -14,18 +12,6 @@ import java.math.BigInteger
 
 object ECHelper {
     val logger = KotlinLogging.logger {}
-
-    fun tradeHash(
-        buyOrderId: SequencerOrderId,
-        sellOrderId: SequencerOrderId,
-    ): String = tradeHash(buyOrderId.value, sellOrderId.value)
-
-    fun tradeHash(
-        buyOrderId: Long,
-        sellOrderId: Long,
-    ): String = sha3((buyOrderId.toString() + sellOrderId.toString()).toByteArray()).toHex()
-
-    fun sha3(messageBytes: ByteArray): ByteArray = Hash.sha3(messageBytes)
 
     fun signData(
         credentials: Credentials,

@@ -1,6 +1,7 @@
 package xyz.funkybit.client.model
 
 import kotlinx.serialization.Serializable
+import xyz.funkybit.client.model.ChainId.Companion.BITCOIN
 import xyz.funkybit.client.model.address.Address
 import xyz.funkybit.client.model.address.BitcoinAddress
 import xyz.funkybit.client.utils.BigDecimalJson
@@ -19,10 +20,10 @@ data class ConfigurationApiResponse(
     val minimumRune: String,
 ) {
     val evmChains: List<Chain>
-        get() = chains.filter { it.id.isEvm() }
+        get() = chains.filter { it.id != BITCOIN }
 
     val bitcoinChain: Chain
-        get() = chains.first { it.id.isBitcoin() }
+        get() = chains.first { it.id == BITCOIN }
 }
 
 enum class Role {

@@ -30,14 +30,14 @@ data class AuthorizeWalletAddressMessage(
     val message: String,
     val authorizedAddress: String,
     val address: String,
-    val chainId: Chain.Id,
+    val chainId: String,
     val timestamp: String,
 )
 
 @Serializable
 data class AuthorizeWalletApiRequest(
     val authorizedAddress: Address,
-    val chainId: Chain.Id,
+    val chainId: String,
     val address: Address,
     val timestamp: String,
     val signature: String,
