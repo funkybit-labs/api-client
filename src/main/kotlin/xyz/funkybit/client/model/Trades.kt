@@ -36,6 +36,7 @@ data class Trade(
     val id: TradeId,
     val timestamp: Instant,
     val orderId: OrderId,
+    val clientOrderId: ClientOrderId?,
     val marketId: MarketId,
     val executionRole: ExecutionRole,
     val counterOrderId: OrderId,
