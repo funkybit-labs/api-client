@@ -51,9 +51,9 @@ fun main() {
     val baseIsOnBitcoin = true
     val quote = "USDC"
     val quoteIsOnBitcoin = false
-    val makerBaseAmount = "0.0001"
-    val price = "1.0"
-    val takerQuoteAmount = "0.0001"
+    val makerBaseAmount = BigDecimal("0.0001")
+    val price = "100000.0"
+    val takerQuoteAmount = BigDecimal("6")
     // Create a client with a wallet
     // Example key - replace with your own
     val privateKey = System.getenv("FUNKYBIT_PRIVATE_KEY") ?: "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3"
@@ -120,7 +120,7 @@ fun main() {
 
         // Deposit base for the limit sell
         val walletBaseBalance = wallet.getWalletBalance(baseSymbol)
-        if (walletBaseBalance.amount < makerBaseAmount.toBigDecimal()) {
+        if (walletBaseBalance.amount < makerBaseAmount) {
             throw RuntimeException(
                 "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id}",
             )
@@ -173,7 +173,7 @@ fun main() {
         println("Waiting for order created...")
         waitForOrderCreated(webSocket, sellResponse.order.clientOrderId)
         val walletQuoteBalance = wallet.getWalletBalance(quoteSymbol)
-        if (walletQuoteBalance.amount < takerQuoteAmount.toBigDecimal()) {
+        if (walletQuoteBalance.amount < takerQuoteAmount) {
             throw RuntimeException(
                 "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id}",
             )
@@ -217,7 +217,7 @@ fun main() {
                 side = OrderSide.Buy,
                 amount =
                     OrderAmount.Fixed(
-                        makerBaseAmount.toBigDecimal().divide(BigDecimal.valueOf(2L)).toFundamentalUnits(baseSymbol.decimals),
+                        makerBaseAmount.divide(BigDecimal.valueOf(2L)).toFundamentalUnits(baseSymbol.decimals),
                     ),
                 signature = EvmSignature.emptySignature(),
                 nonce = generateOrderNonce(),
@@ -293,7 +293,7 @@ fun main() {
             if (order.status == OrderStatus.Open) {
                 println("Cancelling order: ${order.clientOrderId}")
                 // Wait for order cancelled confirmation
-                waitForOrderCancelled(webSocket, order.clientOrderId)
+                order.clientOrderId?.let { waitForOrderCancelled(webSocket, it) }
             }
         }
         println("All orders cancelled")
