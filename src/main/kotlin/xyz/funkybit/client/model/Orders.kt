@@ -186,7 +186,7 @@ enum class ExecutionRole {
 @JsonClassDiscriminator("type")
 sealed class Order {
     abstract val id: OrderId
-    abstract val clientOrderId: ClientOrderId
+    abstract val clientOrderId: ClientOrderId?
     abstract val status: OrderStatus
     abstract val marketId: MarketId
     abstract val side: OrderSide
@@ -198,7 +198,7 @@ sealed class Order {
     @SerialName("market")
     data class Market(
         override val id: OrderId,
-        override val clientOrderId: ClientOrderId,
+        override val clientOrderId: ClientOrderId? = null,
         override val status: OrderStatus,
         override val marketId: MarketId,
         override val side: OrderSide,
@@ -211,7 +211,7 @@ sealed class Order {
     @SerialName("backToBackMarket")
     data class BackToBackMarket(
         override val id: OrderId,
-        override val clientOrderId: ClientOrderId,
+        override val clientOrderId: ClientOrderId? = null,
         override val status: OrderStatus,
         override val marketId: MarketId,
         val secondMarketId: MarketId,
@@ -225,7 +225,7 @@ sealed class Order {
     @SerialName("limit")
     data class Limit(
         override val id: OrderId,
-        override val clientOrderId: ClientOrderId,
+        override val clientOrderId: ClientOrderId? = null,
         override val status: OrderStatus,
         override val marketId: MarketId,
         override val side: OrderSide,

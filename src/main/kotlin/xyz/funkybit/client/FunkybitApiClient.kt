@@ -137,7 +137,7 @@ class FunkybitApiClient(
             val encodedSignInMessage =
                 java.util.Base64
                     .getUrlEncoder()
-                    .encodeToString(Json.encodeToString(signInMessage).toByteArray())
+                    .encodeToString(json.encodeToString(signInMessage).toByteArray())
             return "$encodedSignInMessage.$signature"
         }
     }
@@ -172,7 +172,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/orders")
-                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .post(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_CREATED)
@@ -182,7 +182,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/batch/orders")
-                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .post(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
@@ -192,7 +192,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/orders/${apiRequest.orderId}")
-                .delete(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .delete(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrUnit(expectedStatusCode = HttpURLConnection.HTTP_NO_CONTENT)
@@ -264,7 +264,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/deposits")
-                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .post(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_CREATED)
@@ -294,7 +294,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/withdrawals")
-                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .post(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_CREATED)
@@ -334,7 +334,7 @@ class FunkybitApiClient(
             Request
                 .Builder()
                 .url("$apiServerRootUrl/v1/wallets/authorize")
-                .post(Json.encodeToString(apiRequest).toRequestBody(applicationJson))
+                .post(json.encodeToString(apiRequest).toRequestBody(applicationJson))
                 .build()
                 .withAuthHeaders(authToken),
         ).toErrorOrUnit(expectedStatusCode = HttpURLConnection.HTTP_NO_CONTENT)

@@ -12,6 +12,11 @@ import xyz.funkybit.client.model.OHLCDuration
 import xyz.funkybit.client.model.OutgoingWSMessage
 import xyz.funkybit.client.model.SubscriptionTopic
 
+val json = Json {
+    encodeDefaults = true
+    coerceInputValues = true
+}
+
 fun WebsocketClient.blocking(
     apiUrl: String,
     auth: String?,
@@ -21,7 +26,7 @@ fun WebsocketClient.blocking(
     )
 
 fun WsClient.send(message: IncomingWSMessage) {
-    send(WsMessage(Json.encodeToString(message)))
+    send(WsMessage(json.encodeToString(message)))
 }
 
 fun WsClient.subscribeToOrderBook(marketId: MarketId) {
@@ -73,11 +78,11 @@ fun WsClient.unsubscribe(topic: SubscriptionTopic) {
 
 fun WsClient.receivedDecoded(): Sequence<OutgoingWSMessage> =
     received().map {
-        Json.decodeFromString<OutgoingWSMessage>(it.bodyString())
+        json.decodeFromString<OutgoingWSMessage>(it.bodyString())
     }
 
 fun WebSocket.send(message: IncomingWSMessage) {
-    send(Json.encodeToString(message))
+    send(json.encodeToString(message))
 }
 
 fun WebSocket.subscribe(topic: SubscriptionTopic) {

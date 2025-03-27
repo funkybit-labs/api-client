@@ -39,6 +39,7 @@ import xyz.funkybit.client.model.signature.EvmSignature;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -62,9 +63,9 @@ public class FunkybitClientExample {
         boolean baseIsOnBitcoin = true;
         String quote = "USDC";
         boolean quoteIsOnBitcoin = false;
-        String makerBaseAmount = "0.0001";
-        String price = "1.0";
-        String takerQuoteAmount = "0.0001";
+        BigDecimal makerBaseAmount = new BigDecimal("0.0001");
+        String price = "100000.0";
+        BigDecimal takerQuoteAmount = new BigDecimal("6");
         
         // Create a client with a wallet
         // Example key - replace with your own
@@ -133,12 +134,12 @@ public class FunkybitClientExample {
 
             // Get initial base balance
             List<Balance> initialBalances = client.getBalances().getBalances();
-            BigInteger initialBaseBalance = findBalance(initialBalances, baseSymbol.getName());
+            BigInteger initialBaseBalance = findBalance(initialBalances, baseSymbol);
             System.out.println("Initial " + base + " balance: " + initialBaseBalance);
 
             // Deposit base for the limit sell
             AssetAmount walletBaseBalance = wallet.getWalletBalance(baseSymbol);
-            if (walletBaseBalance.getAmount().compareTo(new BigDecimal(makerBaseAmount)) < 0) {
+            if (walletBaseBalance.getAmount().compareTo(makerBaseAmount) < 0) {
                 throw new RuntimeException(
                     "Need at least " + makerBaseAmount + " " + base + " in " + 
                     (baseIsOnBitcoin ? bitcoinClient.getAddress() : client.getAddress()) + 
@@ -147,7 +148,7 @@ public class FunkybitClientExample {
             }
             
             if (baseIsOnBitcoin) {
-                bitcoinWallet.depositNative(toFundamentalUnits(new BigDecimal(makerBaseAmount), 8));
+                bitcoinWallet.depositNative(toFundamentalUnits(makerBaseAmount, 8));
             } else {
                 wallet.deposit(new AssetAmount(baseSymbol, makerBaseAmount));
             }
@@ -172,7 +173,7 @@ public class FunkybitClientExample {
                 generateOrderNonce(),
                 market.getId(),
                 OrderSide.Sell,
-                new OrderAmount.Fixed(toFundamentalUnits(new BigDecimal(makerBaseAmount), baseSymbol.getDecimals())),
+                new OrderAmount.Fixed(toFundamentalUnits(makerBaseAmount, baseSymbol.getDecimals())),
                 new BigDecimal(price),
                 EvmSignature.Companion.emptySignature(),
                 evmKeyPair.address().getValue(),
@@ -191,7 +192,7 @@ public class FunkybitClientExample {
             waitForOrderCreated(webSocket, sellResponse.getOrder().getClientOrderId());
             
             AssetAmount walletQuoteBalance = wallet.getWalletBalance(quoteSymbol);
-            if (walletQuoteBalance.getAmount().compareTo(new BigDecimal(takerQuoteAmount)) < 0) {
+            if (walletQuoteBalance.getAmount().compareTo(takerQuoteAmount) < 0) {
                 throw new RuntimeException(
                     "Need at least " + takerQuoteAmount + " " + quote + " in " + 
                     (quoteIsOnBitcoin ? bitcoinClient.getAddress() : client.getAddress()) + 
@@ -201,7 +202,7 @@ public class FunkybitClientExample {
             
             // Deposit quote for the market buy
             if (quoteIsOnBitcoin) {
-                bitcoinWallet.depositNative(toFundamentalUnits(new BigDecimal(takerQuoteAmount), 8));
+                bitcoinWallet.depositNative(toFundamentalUnits(takerQuoteAmount, 8));
             } else {
                 wallet.deposit(new AssetAmount(quoteSymbol, takerQuoteAmount));
             }
@@ -213,7 +214,7 @@ public class FunkybitClientExample {
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
             // Get initial quote balance
-            BigInteger initialQuoteBalance = findBalance(client.getBalances().getBalances(), quoteSymbol.getName());
+            BigInteger initialQuoteBalance = findBalance(client.getBalances().getBalances(), quoteSymbol);
             System.out.println("Initial " + quote + " balance: " + initialQuoteBalance);
 
             // Wait for quote balance to increase
@@ -227,7 +228,7 @@ public class FunkybitClientExample {
             waitForSubscription(webSocket, message -> message instanceof MyTrades);
 
             // Place a market buy order
-            BigDecimal halfMakerBaseAmount = new BigDecimal(makerBaseAmount).divide(BigDecimal.valueOf(2L));
+            BigDecimal halfMakerBaseAmount = makerBaseAmount.divide(BigDecimal.valueOf(2L), baseSymbol.getDecimals(), RoundingMode.HALF_UP);
             CreateOrderApiRequest.Market marketBuyOrder = new CreateOrderApiRequest.Market(
                 generateOrderNonce(),
                 market.getId(),
@@ -260,12 +261,10 @@ public class FunkybitClientExample {
             System.out.println("Waiting for trade updates...");
             while (!tradeSettled) {
                 OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-                if (message instanceof OutgoingWSMessage.Publish) {
-                    OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+                if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
                     
-                    if (data instanceof MyOrdersUpdated) {
-                        MyOrdersUpdated ordersUpdated = (MyOrdersUpdated) data;
+                    if (data instanceof MyOrdersUpdated ordersUpdated) {
                         for (Order order : ordersUpdated.getOrders()) {
                             if (order.getClientOrderId().equals(sellResponse.getOrder().getClientOrderId())) {
                                 System.out.println("Limit sell order updated: " + order);
@@ -274,16 +273,14 @@ public class FunkybitClientExample {
                                 }
                             }
                         }
-                    } else if (data instanceof MyTradesCreated) {
-                        MyTradesCreated tradesCreated = (MyTradesCreated) data;
+                    } else if (data instanceof MyTradesCreated tradesCreated) {
                         for (Trade trade : tradesCreated.getTrades()) {
                             if (trade.getExecutionRole() == ExecutionRole.Taker) {
                                 System.out.println("Market buy trade created: " + trade);
                                 marketBuyFilled = true;
                             }
                         }
-                    } else if (data instanceof MyTradesUpdated) {
-                        MyTradesUpdated tradesUpdated = (MyTradesUpdated) data;
+                    } else if (data instanceof MyTradesUpdated tradesUpdated) {
                         for (Trade trade : tradesUpdated.getTrades()) {
                             if (trade.getExecutionRole() == ExecutionRole.Taker) {
                                 System.out.println("Market buy trade updated: " + trade);
@@ -331,7 +328,7 @@ public class FunkybitClientExample {
             // Withdraw balances
             System.out.println("Withdrawing available balances...");
             for (SymbolInfo symbol : Arrays.asList(baseSymbol, quoteSymbol)) {
-                Balance balance = findBalanceBySymbol(balances, symbol.getName());
+                Balance balance = findBalanceBySymbol(balances, symbol);
                 if (balance != null && balance.getAvailable().compareTo(BigInteger.ZERO) > 0) {
                     System.out.println("Withdrawing " + balance.getAvailable() + " " + balance.getSymbol());
                     if ((baseIsOnBitcoin && symbol.equals(baseSymbol)) || 
@@ -353,12 +350,10 @@ public class FunkybitClientExample {
 
             while (!baseWithdrawn || !quoteWithdrawn) {
                 OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-                if (message instanceof OutgoingWSMessage.Publish) {
-                    OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+                if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
                     
-                    if (data instanceof BalancesUpdated) {
-                        BalancesUpdated balancesUpdated = (BalancesUpdated) data;
+                    if (data instanceof BalancesUpdated balancesUpdated) {
                         for (UpdatedBalance balance : balancesUpdated.getBalances()) {
                             System.out.println("Balance updated: " + balance.getSymbol() + ": " + 
                                 balance.getValue() + " (" + balance.getType() + ")");
@@ -414,18 +409,18 @@ public class FunkybitClientExample {
         throw new RuntimeException("Market not found: " + baseSymbol + "/" + quoteSymbol);
     }
 
-    private static BigInteger findBalance(List<Balance> balances, String symbolName) {
+    private static BigInteger findBalance(List<Balance> balances, SymbolInfo symbol) {
         for (Balance balance : balances) {
-            if (balance.getSymbol().equals(symbolName)) {
+            if (balance.getSymbol().equals(symbol.getName())) {
                 return balance.getAvailable();
             }
         }
         return BigInteger.ZERO;
     }
 
-    private static Balance findBalanceBySymbol(List<Balance> balances, String symbolName) {
+    private static Balance findBalanceBySymbol(List<Balance> balances, SymbolInfo symbol) {
         for (Balance balance : balances) {
-            if (balance.getSymbol().equals(symbolName)) {
+            if (balance.getSymbol().equals(symbol.getName())) {
                 return balance;
             }
         }
@@ -438,8 +433,7 @@ public class FunkybitClientExample {
     ) {
         while (true) {
             OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-            if (message instanceof OutgoingWSMessage.Publish) {
-                OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+            if (message instanceof OutgoingWSMessage.Publish publish) {
                 if (predicate.test(publish.getData())) {
                     System.out.println("Subscription confirmed");
                     break;
@@ -454,12 +448,10 @@ public class FunkybitClientExample {
     ) {
         while (true) {
             OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-            if (message instanceof OutgoingWSMessage.Publish) {
-                OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+            if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
-                if (data instanceof MyOrdersCreated) {
-                    MyOrdersCreated ordersCreated = (MyOrdersCreated) data;
+                if (data instanceof MyOrdersCreated ordersCreated) {
                     for (Order order : ordersCreated.getOrders()) {
                         if (order.getClientOrderId().equals(orderId)) {
                             System.out.println("Order created: " + ordersCreated);
@@ -477,12 +469,10 @@ public class FunkybitClientExample {
     ) {
         while (true) {
             OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-            if (message instanceof OutgoingWSMessage.Publish) {
-                OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+            if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
-                if (data instanceof MyOrdersUpdated) {
-                    MyOrdersUpdated ordersUpdated = (MyOrdersUpdated) data;
+                if (data instanceof MyOrdersUpdated ordersUpdated) {
                     for (Order order : ordersUpdated.getOrders()) {
                         if (order.getClientOrderId().equals(orderId) && 
                             order.getStatus() == OrderStatus.Cancelled) {
@@ -503,12 +493,10 @@ public class FunkybitClientExample {
         System.out.println("Waiting for " + symbol + " deposit to complete...");
         while (true) {
             OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
-            if (message instanceof OutgoingWSMessage.Publish) {
-                OutgoingWSMessage.Publish publish = (OutgoingWSMessage.Publish) message;
+            if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
-                if (data instanceof BalancesUpdated) {
-                    BalancesUpdated balancesUpdated = (BalancesUpdated) data;
+                if (data instanceof BalancesUpdated balancesUpdated) {
                     for (UpdatedBalance balance : balancesUpdated.getBalances()) {
                         if (balance.getSymbol().equals(symbol.getName()) &&
                             balance.getType() == BalanceType.Available) {
