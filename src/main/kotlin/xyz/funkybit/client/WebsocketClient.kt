@@ -12,10 +12,11 @@ import xyz.funkybit.client.model.OHLCDuration
 import xyz.funkybit.client.model.OutgoingWSMessage
 import xyz.funkybit.client.model.SubscriptionTopic
 
-val json = Json {
-    encodeDefaults = true
-    coerceInputValues = true
-}
+val json =
+    Json {
+        encodeDefaults = true
+        coerceInputValues = true
+    }
 
 fun WebsocketClient.blocking(
     apiUrl: String,

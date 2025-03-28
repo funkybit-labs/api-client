@@ -126,9 +126,8 @@ class BitcoinWallet(
     }
 
     fun signWithdraw(
-        symbol: String,
+        symbol: SymbolInfo,
         amount: BigInteger,
-        decimals: Int? = null,
     ): CreateWithdrawalApiRequest {
         val nonce = System.currentTimeMillis()
         val message = "[funkybit] Please sign this message to authorize withdrawal of ${if (amount == BigInteger.ZERO) {
@@ -136,13 +135,13 @@ class BitcoinWallet(
         } else {
             amount
                 .fromFundamentalUnits(
-                    decimals?.toUByte() ?: 8u,
+                    symbol.decimals.toUByte(),
                 ).toPlainString()
         }} $symbol from the exchange to your wallet."
         val bitcoinLinkAddressMessage = "$message\nAddress: ${walletAddress.value}, Timestamp: ${Instant.fromEpochMilliseconds(nonce)}"
         val signature = keyPair.ecKey.signMessage(bitcoinLinkAddressMessage)
         return CreateWithdrawalApiRequest(
-            symbol,
+            symbol.name,
             amount,
             nonce,
             Signature.auto(signature),
