@@ -334,7 +334,7 @@ public class FunkybitClientExample {
                     if ((baseIsOnBitcoin && symbol.equals(baseSymbol)) || 
                         (quoteIsOnBitcoin && symbol.equals(quoteSymbol))) {
                         bitcoinClient.createWithdrawal(
-                            bitcoinWallet.signWithdraw(symbol.getName(), balance.getAvailable(), 8)
+                            bitcoinWallet.signWithdraw(symbol, balance.getAvailable())
                         );
                     } else {
                         wallet.withdraw(new AssetAmount(symbol, balance.getAvailable()));

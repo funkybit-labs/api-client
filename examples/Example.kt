@@ -318,7 +318,7 @@ fun main() {
             if (balance.available > BigInteger.ZERO) {
                 println("Withdrawing ${balance.available} ${balance.symbol}")
                 if ((baseIsOnBitcoin && symbol == baseSymbol) || (quoteIsOnBitcoin && symbol == quoteSymbol)) {
-                    bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol.name, balance.available, 8))
+                    bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol, balance.available))
                 } else {
                     wallet.withdraw(AssetAmount(symbol, balance.available))
                 }
