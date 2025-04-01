@@ -103,7 +103,7 @@ class BitcoinTransactionUtils(
                 Coin.valueOf(it.amount.toLong()),
                 ecKey,
                 Transaction.SigHash.ALL,
-                false,
+                true,
             )
         }
         return mempoolSpaceClient.calculateFee(rawTx.vsize)
