@@ -61,8 +61,8 @@ class BitcoinTransactionUtils(
                 ScriptBuilder.createP2WPKHOutputScript(ecKey),
                 Coin.valueOf(it.amount.toLong()),
                 ecKey,
-                Transaction.SigHash.NONE,
-                true,
+                Transaction.SigHash.ALL,
+                false,
             )
         }
         return rawTx
@@ -102,8 +102,8 @@ class BitcoinTransactionUtils(
                 ScriptBuilder.createP2WPKHOutputScript(ecKey),
                 Coin.valueOf(it.amount.toLong()),
                 ecKey,
-                Transaction.SigHash.NONE,
-                true,
+                Transaction.SigHash.ALL,
+                false,
             )
         }
         return mempoolSpaceClient.calculateFee(rawTx.vsize)

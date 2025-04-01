@@ -114,7 +114,7 @@ class MempoolSpaceClient(
     private val apiServerRootUrl: String = System.getenv("MEMPOOL_SPACE_API_URL") ?: "https://mempool.space/api",
 ) {
     val logger = KotlinLogging.logger {}
-    private val recommendedFeeRoute = System.getenv("MEMPOOL_SPACE_RECOMMENDED_FEE_ROUTE") ?: "fees/recommended"
+    private val recommendedFeeRoute = System.getenv("MEMPOOL_SPACE_RECOMMENDED_FEE_ROUTE") ?: "v1/fees/recommended"
     private val httpClient = HttpClient.newBuilder().withLogging(logger).build()
 
     val json =
