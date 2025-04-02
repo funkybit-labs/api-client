@@ -14,6 +14,10 @@ import xyz.funkybit.client.utils.BigIntegerJson
 @Serializable
 sealed class IncomingWSMessage {
     @Serializable
+    @SerialName("Ping")
+    data object Ping : IncomingWSMessage()
+
+    @Serializable
     @SerialName("Subscribe")
     data class Subscribe(
         val topic: SubscriptionTopic,
@@ -88,6 +92,10 @@ sealed class SubscriptionTopic {
 @JsonClassDiscriminator("type")
 @Serializable
 sealed class OutgoingWSMessage {
+    @Serializable
+    @SerialName("Pong")
+    data object Pong : OutgoingWSMessage()
+
     @Serializable
     @SerialName("Publish")
     data class Publish(
