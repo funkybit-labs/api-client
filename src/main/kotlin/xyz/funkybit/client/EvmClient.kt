@@ -155,7 +155,7 @@ open class EvmClient(
 
     val gasProvider =
         GasProvider(
-            gasLimit = BigInteger.valueOf(100000),
+            gasLimit = BigInteger.valueOf(150000),
             defaultMaxPriorityFeePerGas = config.defaultMaxPriorityFeePerGasInWei,
             chainId = chainId.toLong(),
             web3j = web3j,
