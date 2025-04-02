@@ -1,10 +1,10 @@
 package xyz.funkybit.client.example
 
-import org.http4k.websocket.WsClient
 import org.http4k.websocket.WsStatus
 import xyz.funkybit.client.BitcoinWallet
 import xyz.funkybit.client.FunkybitApiClient
 import xyz.funkybit.client.FunkybitApiClient.Companion.DEFAULT_API_URL
+import xyz.funkybit.client.ReconnectingWebsocketClient
 import xyz.funkybit.client.Wallet
 import xyz.funkybit.client.WalletKeyPair
 import xyz.funkybit.client.bitcoinConfig
@@ -32,15 +32,11 @@ import xyz.funkybit.client.model.SubscriptionTopic
 import xyz.funkybit.client.model.SymbolInfo
 import xyz.funkybit.client.model.address.EvmAddress
 import xyz.funkybit.client.model.signature.EvmSignature
-import xyz.funkybit.client.receivedDecoded
-import xyz.funkybit.client.subscribeToBalances
-import xyz.funkybit.client.subscribeToMyOrders
-import xyz.funkybit.client.subscribeToMyTrades
-import xyz.funkybit.client.unsubscribe
 import xyz.funkybit.client.utils.generateOrderNonce
 import xyz.funkybit.client.utils.toFundamentalUnits
 import java.math.BigDecimal
 import java.math.BigInteger
+import kotlin.system.exitProcess
 
 /**
  * Example demonstrating how to use the funkybit API client
@@ -245,6 +241,7 @@ fun main() {
         println("Waiting for trade updates...")
         while (!tradeSettled) {
             when (val publish = webSocket.receivedDecoded().first()) {
+                is OutgoingWSMessage.Pong -> {}
                 is OutgoingWSMessage.Publish -> {
                     when (publish.data) {
                         is MyOrdersUpdated -> {
@@ -333,6 +330,7 @@ fun main() {
 
         while (!baseWithdrawn || !quoteWithdrawn) {
             when (val publish = webSocket.receivedDecoded().first()) {
+                is OutgoingWSMessage.Pong -> {}
                 is OutgoingWSMessage.Publish -> {
                     when (publish.data) {
                         is BalancesUpdated -> {
@@ -370,14 +368,17 @@ fun main() {
         webSocket.close(WsStatus(WsStatus.NORMAL.code, ""))
         println("Example completed")
     }
+
+    exitProcess(0)
 }
 
 private fun waitForSubscription(
-    webSocket: WsClient,
+    webSocket: ReconnectingWebsocketClient,
     predicate: (Publishable) -> Boolean,
 ) {
     while (true) {
         when (val publish = webSocket.receivedDecoded().first()) {
+            is OutgoingWSMessage.Pong -> {}
             is OutgoingWSMessage.Publish -> {
                 if (predicate(publish.data)) {
                     println("Subscription confirmed")
@@ -389,11 +390,12 @@ private fun waitForSubscription(
 }
 
 private fun waitForOrderCreated(
-    webSocket: WsClient,
+    webSocket: ReconnectingWebsocketClient,
     orderId: ClientOrderId,
 ) {
     while (true) {
         when (val publish = webSocket.receivedDecoded().first()) {
+            is OutgoingWSMessage.Pong -> {}
             is OutgoingWSMessage.Publish -> {
                 when (publish.data) {
                     is MyOrdersCreated -> {
@@ -410,11 +412,12 @@ private fun waitForOrderCreated(
 }
 
 private fun waitForOrderCancelled(
-    webSocket: WsClient,
+    webSocket: ReconnectingWebsocketClient,
     orderId: ClientOrderId,
 ) {
     while (true) {
         when (val publish = webSocket.receivedDecoded().first()) {
+            is OutgoingWSMessage.Pong -> {}
             is OutgoingWSMessage.Publish -> {
                 when (publish.data) {
                     is MyOrdersUpdated -> {
@@ -431,13 +434,14 @@ private fun waitForOrderCancelled(
 }
 
 private fun waitForBalanceIncrease(
-    webSocket: WsClient,
+    webSocket: ReconnectingWebsocketClient,
     symbol: SymbolInfo,
     initialBalance: BigInteger,
 ) {
     println("Waiting for $symbol deposit to complete...")
     while (true) {
         when (val publish = webSocket.receivedDecoded().first()) {
+            is OutgoingWSMessage.Pong -> {}
             is OutgoingWSMessage.Publish -> {
                 when (publish.data) {
                     is BalancesUpdated -> {

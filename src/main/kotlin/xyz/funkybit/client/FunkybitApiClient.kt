@@ -142,7 +142,7 @@ class FunkybitApiClient(
         }
     }
 
-    fun newWebSocket(authToken: String): WsClient = WebsocketClient.blocking(this.apiServerRootUrl, authToken)
+    fun newWebSocket(authToken: String) = ReconnectingWebsocketClient(this.apiServerRootUrl, authToken)
 
     fun switchChain(chainId: String) {
         currentChainId = chainId

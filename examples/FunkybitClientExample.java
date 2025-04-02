@@ -1,8 +1,8 @@
 import kotlinx.datetime.Clock;
-import org.http4k.websocket.WsClient;
 import org.http4k.websocket.WsStatus;
 import xyz.funkybit.client.BitcoinWallet;
 import xyz.funkybit.client.FunkybitApiClient;
+import xyz.funkybit.client.ReconnectingWebsocketClient;
 import xyz.funkybit.client.Wallet;
 import xyz.funkybit.client.WalletKeyPair;
 import xyz.funkybit.client.model.AccountConfigurationApiResponse;
@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.function.Predicate;
 
 import static xyz.funkybit.client.BitcoinConfigKt.getBitcoinConfig;
-import static xyz.funkybit.client.WebsocketClientKt.*;
 import static xyz.funkybit.client.model.ChainId.BITCOIN;
 import static xyz.funkybit.client.utils.UnitsKt.toFundamentalUnits;
 import static xyz.funkybit.client.utils.UtilsKt.generateOrderNonce;
@@ -107,7 +106,7 @@ public class FunkybitClientExample {
         );
 
         // Connect to WebSocket for real-time updates
-        WsClient webSocket = client.newWebSocket(client.getAuthToken());
+        ReconnectingWebsocketClient webSocket = client.newWebSocket(client.getAuthToken());
 
         try {
             Chain evmChain = config.getEvmChains().get(0);
@@ -128,7 +127,7 @@ public class FunkybitClientExample {
             }
 
             // Subscribe to balance updates before deposit
-            subscribeToBalances(webSocket);
+            webSocket.subscribeToBalances();
             System.out.println("Waiting for balance subscription confirmation...");
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
@@ -157,10 +156,10 @@ public class FunkybitClientExample {
             // Wait for base balance to increase
             waitForBalanceIncrease(webSocket, baseSymbol, initialBaseBalance);
 
-            unsubscribe(webSocket, SubscriptionTopic.Balances.INSTANCE);
+            webSocket.unsubscribe(SubscriptionTopic.Balances.INSTANCE);
 
             // Subscribe to MyOrders topic
-            subscribeToMyOrders(webSocket);
+            webSocket.subscribeToMyOrders();
 
             // Wait for subscription confirmation
             System.out.println("Waiting for order subscription confirmation...");
@@ -209,7 +208,7 @@ public class FunkybitClientExample {
             System.out.println("Deposited " + takerQuoteAmount + " " + quote);
 
             // Subscribe to balance updates for quote deposit
-            subscribeToBalances(webSocket);
+            webSocket.subscribeToBalances();
             System.out.println("Waiting for balance subscription confirmation...");
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
@@ -220,10 +219,10 @@ public class FunkybitClientExample {
             // Wait for quote balance to increase
             waitForBalanceIncrease(webSocket, quoteSymbol, initialQuoteBalance);
 
-            unsubscribe(webSocket, SubscriptionTopic.Balances.INSTANCE);
+            webSocket.unsubscribe(SubscriptionTopic.Balances.INSTANCE);
 
             // Subscribe to MyTrades topic for the market buy
-            subscribeToMyTrades(webSocket);
+            webSocket.subscribeToMyTrades();
             System.out.println("Waiting for trades subscription confirmation...");
             waitForSubscription(webSocket, message -> message instanceof MyTrades);
 
@@ -260,13 +259,13 @@ public class FunkybitClientExample {
             // Wait for all updates
             System.out.println("Waiting for trade updates...");
             while (!tradeSettled) {
-                OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+                OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
                 if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
                     
                     if (data instanceof MyOrdersUpdated ordersUpdated) {
                         for (Order order : ordersUpdated.getOrders()) {
-                            if (order.getClientOrderId().equals(sellResponse.getOrder().getClientOrderId())) {
+                            if (order.getClientOrderId() != null && order.getClientOrderId().equals(sellResponse.getOrder().getClientOrderId())) {
                                 System.out.println("Limit sell order updated: " + order);
                                 if (order.getStatus() == OrderStatus.Filled) {
                                     limitSellFilled = true;
@@ -306,7 +305,7 @@ public class FunkybitClientExample {
                 if (order.getStatus() == OrderStatus.Open) {
                     System.out.println("Cancelling order: " + order.getClientOrderId());
                     // Wait for order cancelled confirmation
-                    waitForOrderCancelled(webSocket, order.getClientOrderId());
+                    if (order.getClientOrderId() != null) waitForOrderCancelled(webSocket, order.getClientOrderId());
                 }
             }
             System.out.println("All orders cancelled");
@@ -321,7 +320,7 @@ public class FunkybitClientExample {
             }
 
             // Subscribe to balance updates
-            subscribeToBalances(webSocket);
+            webSocket.subscribeToBalances();
             System.out.println("Waiting for balance subscription confirmation...");
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
@@ -349,7 +348,7 @@ public class FunkybitClientExample {
             boolean quoteWithdrawn = false;
 
             while (!baseWithdrawn || !quoteWithdrawn) {
-                OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+                OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
                 if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
                     
@@ -388,6 +387,7 @@ public class FunkybitClientExample {
             webSocket.close(new WsStatus(WsStatus.Companion.getNORMAL().getCode(), ""));
             System.out.println("Example completed");
         }
+        System.exit(0);
     }
 
     private static SymbolInfo findSymbol(List<SymbolInfo> symbols, String name) {
@@ -428,11 +428,11 @@ public class FunkybitClientExample {
     }
 
     private static void waitForSubscription(
-        WsClient webSocket,
+        ReconnectingWebsocketClient webSocket,
         Predicate<Publishable> predicate
     ) {
         while (true) {
-            OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+            OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 if (predicate.test(publish.getData())) {
                     System.out.println("Subscription confirmed");
@@ -443,11 +443,11 @@ public class FunkybitClientExample {
     }
 
     private static void waitForOrderCreated(
-        WsClient webSocket,
+        ReconnectingWebsocketClient webSocket,
         String orderId
     ) {
         while (true) {
-            OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+            OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
@@ -464,11 +464,11 @@ public class FunkybitClientExample {
     }
 
     private static void waitForOrderCancelled(
-        WsClient webSocket,
+        ReconnectingWebsocketClient webSocket,
         String orderId
     ) {
         while (true) {
-            OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+            OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
@@ -486,13 +486,13 @@ public class FunkybitClientExample {
     }
 
     private static void waitForBalanceIncrease(
-        WsClient webSocket,
+        ReconnectingWebsocketClient webSocket,
         SymbolInfo symbol,
         BigInteger initialBalance
     ) {
         System.out.println("Waiting for " + symbol + " deposit to complete...");
         while (true) {
-            OutgoingWSMessage message = receivedDecoded(webSocket).iterator().next();
+            OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
                 
