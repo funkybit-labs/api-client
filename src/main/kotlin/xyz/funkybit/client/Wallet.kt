@@ -80,7 +80,7 @@ class Wallet(
                         (
                             System.getenv(
                                 "DEFAULT_MAX_PRIORITY_FEE_PER_GAS_WEI",
-                            ) ?: "5000000000"
+                            ) ?: "5000000"
                         ).toBigInteger(),
                     enableWeb3jLogging = (System.getenv("ENABLE_WEB3J_LOGGING") ?: "true") == "true",
                     maxRpcNodeEventualConsistencyTolerance =
