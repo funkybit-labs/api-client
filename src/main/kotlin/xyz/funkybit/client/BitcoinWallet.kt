@@ -137,7 +137,7 @@ class BitcoinWallet(
                 .fromFundamentalUnits(
                     symbol.decimals.toUByte(),
                 ).toPlainString()
-        }} $symbol from the exchange to your wallet."
+        }} ${symbol.name} from the exchange to your wallet."
         val bitcoinLinkAddressMessage = "$message\nAddress: ${walletAddress.value}, Timestamp: ${Instant.fromEpochMilliseconds(nonce)}"
         val signature = keyPair.ecKey.signMessage(bitcoinLinkAddressMessage)
         return CreateWithdrawalApiRequest(
