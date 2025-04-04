@@ -138,6 +138,7 @@ sealed class CreateOrderApiRequest {
         override val verifyingChainId: String,
         override val clientOrderId: ClientOrderId,
         override val captchaToken: String? = null,
+        val cancelSide: Boolean = false,
     ) : CreateOrderApiRequest()
 }
 

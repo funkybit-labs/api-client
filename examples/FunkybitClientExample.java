@@ -178,7 +178,8 @@ public class FunkybitClientExample {
                 evmKeyPair.address().getValue(),
                 evmChain.getId(),
                 "example-sell-" + System.currentTimeMillis(),
-                "recaptcha-token"
+                "recaptcha-token",
+                    false
             );
 
             CreateOrderApiRequest signedSellOrder = wallet.signOrder(sellOrder, null);
