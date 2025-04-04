@@ -1,6 +1,7 @@
 package xyz.funkybit.client
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import kotlinx.datetime.Clock
@@ -20,6 +21,7 @@ import org.http4k.websocket.WsClient
 import org.web3j.crypto.Credentials
 import xyz.funkybit.client.model.AccountConfigurationApiResponse
 import xyz.funkybit.client.model.ApiCallFailure
+import xyz.funkybit.client.model.ApiError
 import xyz.funkybit.client.model.ApiErrors
 import xyz.funkybit.client.model.AuthorizeWalletApiRequest
 import xyz.funkybit.client.model.BalancesApiResponse
@@ -43,6 +45,7 @@ import xyz.funkybit.client.model.Order
 import xyz.funkybit.client.model.OrderId
 import xyz.funkybit.client.model.OrderStatus
 import xyz.funkybit.client.model.OrdersApiResponse
+import xyz.funkybit.client.model.ReasonCode
 import xyz.funkybit.client.model.SignInMessage
 import xyz.funkybit.client.model.WithdrawalApiResponse
 import xyz.funkybit.client.model.WithdrawalId
@@ -395,13 +398,15 @@ class FunkybitApiClient(
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
     if (this.isLeft()) {
-        throw Exception(this.leftOrNull()?.error?.displayMessage ?: "Unknown Error")
+        val apiCallFailure = this.leftOrNull()!!
+        throw Exception("HTTP ${apiCallFailure.httpCode}: ${apiCallFailure.error?.displayMessage ?: "Unknown Error"}")
     }
     return this.getOrNull()!!
 }
 
 inline fun <reified T> Response.toErrorOrPayload(expectedStatusCode: Int): Either<ApiCallFailure, T> =
     either {
+
         val bodyString = body?.string()
         val json = Json { ignoreUnknownKeys = true }
 
@@ -411,7 +416,7 @@ inline fun <reified T> Response.toErrorOrPayload(expectedStatusCode: Int): Eithe
                     try {
                         json.decodeFromString<ApiErrors>(bodyString).errors.single()
                     } catch (e: Exception) {
-                        null
+                        ApiError(ReasonCode.ApiErrorParsingError, "Unable to parse body: $it")
                     }
                 }
 

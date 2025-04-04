@@ -1,4 +1,5 @@
 package xyz.funkybit.client
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.datetime.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -31,6 +32,8 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
     private var heartbeatThread: Thread? = null
     private var isRunning = true
     private var inMaintenanceMode = false
+
+    private val logger = KotlinLogging.logger {}
 
     init {
         startHeartbeat()
