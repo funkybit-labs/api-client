@@ -395,10 +395,15 @@ class FunkybitApiClient(
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()
 }
 
+class MaintenanceMode: Exception()
+
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
     if (this.isLeft()) {
         val apiCallFailure = this.leftOrNull()!!
+        if (apiCallFailure.httpCode == 418) {
+            throw MaintenanceMode()
+        }
         throw Exception("HTTP ${apiCallFailure.httpCode}: ${apiCallFailure.error?.displayMessage ?: "Unknown Error"}")
     }
     return this.getOrNull()!!
