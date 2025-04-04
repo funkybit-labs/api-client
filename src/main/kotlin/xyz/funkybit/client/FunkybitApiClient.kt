@@ -15,11 +15,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.http4k.client.WebsocketClient
-import org.http4k.websocket.WsClient
 import org.web3j.crypto.Credentials
 import xyz.funkybit.client.model.AccountConfigurationApiResponse
 import xyz.funkybit.client.model.ApiCallFailure
+import xyz.funkybit.client.model.ApiError
 import xyz.funkybit.client.model.ApiErrors
 import xyz.funkybit.client.model.AuthorizeWalletApiRequest
 import xyz.funkybit.client.model.BalancesApiResponse
@@ -43,6 +42,7 @@ import xyz.funkybit.client.model.Order
 import xyz.funkybit.client.model.OrderId
 import xyz.funkybit.client.model.OrderStatus
 import xyz.funkybit.client.model.OrdersApiResponse
+import xyz.funkybit.client.model.ReasonCode
 import xyz.funkybit.client.model.SignInMessage
 import xyz.funkybit.client.model.WithdrawalApiResponse
 import xyz.funkybit.client.model.WithdrawalId
@@ -392,10 +392,16 @@ class FunkybitApiClient(
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()
 }
 
+class MaintenanceMode : Exception()
+
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
     if (this.isLeft()) {
-        throw Exception(this.leftOrNull()?.error?.displayMessage ?: "Unknown Error")
+        val apiCallFailure = this.leftOrNull()!!
+        if (apiCallFailure.httpCode == 418) {
+            throw MaintenanceMode()
+        }
+        throw Exception("HTTP ${apiCallFailure.httpCode}: ${apiCallFailure.error?.displayMessage ?: "Unknown Error"}")
     }
     return this.getOrNull()!!
 }
@@ -411,7 +417,7 @@ inline fun <reified T> Response.toErrorOrPayload(expectedStatusCode: Int): Eithe
                     try {
                         json.decodeFromString<ApiErrors>(bodyString).errors.single()
                     } catch (e: Exception) {
-                        null
+                        ApiError(ReasonCode.ApiErrorParsingError, "Unable to parse body: $it")
                     }
                 }
 

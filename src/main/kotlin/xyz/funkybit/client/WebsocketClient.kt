@@ -1,4 +1,5 @@
 package xyz.funkybit.client
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.datetime.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -25,47 +26,57 @@ val json =
         coerceInputValues = true
     }
 
-class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: String?) {
+class ReconnectingWebsocketClient(
+    private val apiUrl: String,
+    private val auth: String?,
+) {
     private val activeSubscriptions = CopyOnWriteArraySet<SubscriptionTopic>()
     private var websocket = newWebsocket()
     private var heartbeatThread: Thread? = null
     private var isRunning = true
     private var inMaintenanceMode = false
 
+    private val logger = KotlinLogging.logger {}
+
     init {
         startHeartbeat()
     }
 
-    private fun newWebsocket() = blocking(
-        uri = Uri.of(apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect" + (auth?.let { "?auth=$auth" } ?: "")),
-    )
+    private fun newWebsocket() =
+        blocking(
+            uri = Uri.of(apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect" + (auth?.let { "?auth=$auth" } ?: "")),
+        )
 
     private fun startHeartbeat() {
-        heartbeatThread = thread(isDaemon = true, start = true, name = "funkybit-websocket-heartbeat") {
-            var lastPing = Clock.System.now()
-            while (isRunning) {
-                try {
-                    Thread.sleep(1000)
-                    val now = Clock.System.now()
-                    if (now.minus(lastPing) > 30.seconds) {
-                        lastPing = now
-                        if (!inMaintenanceMode) {
-                            withReconnection { ws -> ws.ping() }
+        heartbeatThread =
+            thread(isDaemon = true, start = true, name = "funkybit-websocket-heartbeat") {
+                var lastPing = Clock.System.now()
+                while (isRunning) {
+                    try {
+                        Thread.sleep(1000)
+                        val now = Clock.System.now()
+                        if (now.minus(lastPing) > 30.seconds) {
+                            lastPing = now
+                            if (!inMaintenanceMode) {
+                                withReconnection { ws -> ws.ping() }
+                            }
                         }
+                    } catch (e: InterruptedException) {
+                        // Thread was interrupted, likely during shutdown
+                        break
+                    } catch (e: Exception) {
+                        // Log heartbeat error but don't reconnect here as withReconnection already handles it
+                        logger.warn { "Heartbeat error: ${e.message}" }
                     }
-                } catch (e: InterruptedException) {
-                    // Thread was interrupted, likely during shutdown
-                    break
-                } catch (e: Exception) {
-                    // Log heartbeat error but don't reconnect here as withReconnection already handles it
-                    println("Heartbeat error: ${e.message}")
                 }
             }
-        }
     }
 
     // Helper function that handles reconnection
-    private fun <T> withReconnection(maxRetries: Int = 1000, block: (WsClient) -> T): T {
+    private fun <T> withReconnection(
+        maxRetries: Int = 1000,
+        block: (WsClient) -> T,
+    ): T {
         var retryCount = 0
         var lastException: Exception? = null
 
@@ -74,19 +85,20 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
                 return block(websocket)
             } catch (e: Exception) {
                 lastException = e
-                println("WebSocket operation failed: ${e.message}")
+                logger.warn { "WebSocket operation failed: ${e.message}" }
 
                 // Try to reconnect
                 try {
-                    val delay = if (inMaintenanceMode) {
-                        1000L
-                    } else {
-                        // (quick) exponential backoff with jitter
-                        val baseDelay = (2 * 1.05.pow(retryCount.toDouble())).coerceAtMost(5000.0).toLong()
-                        val jitter = Random.nextLong(baseDelay / 2)
-                        retryCount += 1
-                        baseDelay + jitter
-                    }
+                    val delay =
+                        if (inMaintenanceMode) {
+                            1000L
+                        } else {
+                            // (quick) exponential backoff with jitter
+                            val baseDelay = (2 * 1.05.pow(retryCount.toDouble())).coerceAtMost(5000.0).toLong()
+                            val jitter = Random.nextLong(baseDelay / 2)
+                            retryCount += 1
+                            baseDelay + jitter
+                        }
 
                     Thread.sleep(delay)
 
@@ -98,13 +110,13 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
                         websocket.send(IncomingWSMessage.Subscribe(topic))
                     }
                     inMaintenanceMode = false
-                    println("Reconnected successfully")
+                    logger.info { "Reconnected successfully" }
                 } catch (reconnectException: Exception) {
                     // funkybit returns HTTP status code 418 for maintenance mode
                     if ((reconnectException.message ?: "").startsWith("Expected HTTP 101 response but was '418 '")) {
                         inMaintenanceMode = true
                     }
-                    println("Reconnection attempt failed: ${reconnectException.message}")
+                    logger.warn { "Reconnection attempt failed: ${reconnectException.message}" }
                 }
             }
         }
@@ -186,14 +198,15 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
         withReconnection { ws -> ws.send(IncomingWSMessage.Unsubscribe(topic)) }
     }
 
-    fun receivedDecoded(): Sequence<OutgoingWSMessage> {
-        return sequence {
+    fun receivedDecoded(): Sequence<OutgoingWSMessage> =
+        sequence {
             while (isRunning) {
                 try {
                     // Get a new sequence of messages
-                    val messageSequence = withReconnection { ws ->
-                        ws.received().iterator()
-                    }
+                    val messageSequence =
+                        withReconnection { ws ->
+                            ws.received().iterator()
+                        }
 
                     // Process messages until exhausted or exception occurs
                     while (true) {
@@ -202,14 +215,14 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
                             val message = messageSequence.next()
                             yield(json.decodeFromString<OutgoingWSMessage>(message.bodyString()))
                         } catch (e: Exception) {
-                            println("Error processing message: ${e.message}")
+                            logger.error { "Error processing message: ${e.message}" }
                             break // Break the inner loop to reconnect
                         }
                     }
                 } catch (e: Exception) {
                     // If we get here, the withReconnection failed after max retries
                     // Wait a bit before trying again
-                    println("Failed to connect after multiple attempts: ${e.message}")
+                    logger.error { "Failed to connect after multiple attempts: ${e.message}" }
                     Thread.sleep(5000)
                 }
 
@@ -217,7 +230,6 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
                 if (!isRunning) break
             }
         }
-    }
 
     fun close(status: WsStatus = WsStatus.NORMAL) {
         isRunning = false
@@ -227,7 +239,7 @@ class ReconnectingWebsocketClient(private val apiUrl: String, private val auth: 
             websocket.close(status)
         } catch (e: Exception) {
             // Ignore exceptions during close
-            println("Got an exception closing the websocket: ${e.message}")
+            logger.warn { "Got an exception closing the websocket: ${e.message}" }
         }
         activeSubscriptions.clear()
     }
