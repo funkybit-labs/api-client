@@ -1,7 +1,6 @@
 package xyz.funkybit.client
 
 import arrow.core.Either
-import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import kotlinx.datetime.Clock
@@ -16,8 +15,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.http4k.client.WebsocketClient
-import org.http4k.websocket.WsClient
 import org.web3j.crypto.Credentials
 import xyz.funkybit.client.model.AccountConfigurationApiResponse
 import xyz.funkybit.client.model.ApiCallFailure
@@ -395,7 +392,7 @@ class FunkybitApiClient(
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()
 }
 
-class MaintenanceMode: Exception()
+class MaintenanceMode : Exception()
 
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
@@ -411,7 +408,6 @@ fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
 
 inline fun <reified T> Response.toErrorOrPayload(expectedStatusCode: Int): Either<ApiCallFailure, T> =
     either {
-
         val bodyString = body?.string()
         val json = Json { ignoreUnknownKeys = true }
 

@@ -37,7 +37,7 @@ enum class ReasonCode {
     MarketIsClosed,
     PoolNotFound,
     InvalidContractAddress,
-    ApiErrorParsingError
+    ApiErrorParsingError,
 }
 
 data class ApiCallFailure(
