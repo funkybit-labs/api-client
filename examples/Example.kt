@@ -158,6 +158,7 @@ fun main() {
                 signingAddress = evmKeyPair.address().value,
                 verifyingChainId = evmChain.id,
                 captchaToken = "recaptcha-token",
+                cancelSide = false,
             )
 
         val signedSellOrder = wallet.signOrder(sellOrder)
