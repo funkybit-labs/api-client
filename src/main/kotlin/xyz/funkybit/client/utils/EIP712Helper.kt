@@ -1,6 +1,5 @@
 package xyz.funkybit.client.utils
 
-import io.github.oshai.kotlinlogging.KotlinLogging
 import org.web3j.crypto.StructuredData
 import org.web3j.crypto.StructuredDataEncoder
 import xyz.funkybit.client.model.AuthorizeWalletAddressMessage
@@ -9,14 +8,11 @@ import xyz.funkybit.client.model.SignInMessage
 import xyz.funkybit.client.model.address.Address
 
 object EIP712Helper {
-    val logger = KotlinLogging.logger {}
-
     fun computeHash(
         tx: EIP712Transaction,
         chainId: String,
         verifyingContract: Address,
     ): ByteArray {
-        logger.debug { "computeHash($tx, $chainId, $verifyingContract)" }
         //
         // Structured data contains both the schema and the data, the 'types' section holds the schema. The field ordering
         // in type definitions is important since that is the order in which the data in these fields is appended
