@@ -158,6 +158,15 @@ class FunkybitApiClient(
             )
     }
 
+    private inline fun <reified T> sendWithReAuth(call: FunkybitApiClient.() -> T): T {
+        try {
+            return call.invoke(this)
+        } catch (e: Unauthenticated) {
+            reissueAuthToken()
+            return call.invoke(this)
+        }
+    }
+
     fun tryGetConfiguration(): Either<ApiCallFailure, ConfigurationApiResponse> =
         execute(
             Request
@@ -349,44 +358,50 @@ class FunkybitApiClient(
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
 
-    fun getConfiguration(): ConfigurationApiResponse = tryGetConfiguration().throwOrReturn()
+    fun getConfiguration(): ConfigurationApiResponse = sendWithReAuth { tryGetConfiguration().throwOrReturn() }
 
-    fun createOrder(apiRequest: CreateOrderApiRequest): CreateOrderApiResponse = tryCreateOrder(apiRequest).throwOrReturn()
+    fun createOrder(apiRequest: CreateOrderApiRequest): CreateOrderApiResponse =
+        sendWithReAuth { tryCreateOrder(apiRequest).throwOrReturn() }
 
-    fun batchOrders(apiRequest: BatchOrdersApiRequest): BatchOrdersApiResponse = tryBatchOrders(apiRequest).throwOrReturn()
+    fun batchOrders(apiRequest: BatchOrdersApiRequest): BatchOrdersApiResponse =
+        sendWithReAuth { tryBatchOrders(apiRequest).throwOrReturn() }
 
-    fun cancelOrder(apiRequest: CancelOrderApiRequest) = tryCancelOrder(apiRequest).throwOrReturn()
+    fun cancelOrder(apiRequest: CancelOrderApiRequest) = sendWithReAuth { tryCancelOrder(apiRequest).throwOrReturn() }
 
-    fun getOrder(id: OrderId): Order = tryGetOrder(id).throwOrReturn()
+    fun getOrder(id: OrderId): Order = sendWithReAuth { tryGetOrder(id).throwOrReturn() }
 
     fun listOrders(
         statuses: List<OrderStatus> = emptyList(),
         marketId: MarketId? = null,
-    ): OrdersApiResponse = tryListOrders(statuses, marketId).throwOrReturn()
+    ): OrdersApiResponse = sendWithReAuth { tryListOrders(statuses, marketId).throwOrReturn() }
 
-    fun cancelOpenOrders(marketIds: List<MarketId> = emptyList()) = tryCancelOpenOrders(marketIds).throwOrReturn()
+    fun cancelOpenOrders(marketIds: List<MarketId> = emptyList()) = sendWithReAuth { tryCancelOpenOrders(marketIds).throwOrReturn() }
 
-    fun getOrderBook(marketId: MarketId): GetOrderBookApiResponse = tryGetOrderBook(marketId).throwOrReturn()
+    fun getOrderBook(marketId: MarketId): GetOrderBookApiResponse = sendWithReAuth { tryGetOrderBook(marketId).throwOrReturn() }
 
-    fun getConsumptions(): GetConsumptionsApiResponse = tryGetConsumptions().throwOrReturn()
+    fun getConsumptions(): GetConsumptionsApiResponse = sendWithReAuth { tryGetConsumptions().throwOrReturn() }
 
-    fun createDeposit(apiRequest: CreateDepositApiRequest): DepositApiResponse = tryCreateDeposit(apiRequest).throwOrReturn()
+    fun createDeposit(apiRequest: CreateDepositApiRequest): DepositApiResponse =
+        sendWithReAuth { tryCreateDeposit(apiRequest).throwOrReturn() }
 
-    fun getDeposit(id: DepositId): DepositApiResponse = tryGetDeposit(id).throwOrReturn()
+    fun getDeposit(id: DepositId): DepositApiResponse = sendWithReAuth { tryGetDeposit(id).throwOrReturn() }
 
-    fun listDeposits(): ListDepositsApiResponse = tryListDeposits().throwOrReturn()
+    fun listDeposits(): ListDepositsApiResponse = sendWithReAuth { tryListDeposits().throwOrReturn() }
 
-    fun createWithdrawal(apiRequest: CreateWithdrawalApiRequest): WithdrawalApiResponse = tryCreateWithdrawal(apiRequest).throwOrReturn()
+    fun createWithdrawal(apiRequest: CreateWithdrawalApiRequest): WithdrawalApiResponse =
+        sendWithReAuth {
+            tryCreateWithdrawal(apiRequest).throwOrReturn()
+        }
 
-    fun getWithdrawal(id: WithdrawalId): WithdrawalApiResponse = tryGetWithdrawal(id).throwOrReturn()
+    fun getWithdrawal(id: WithdrawalId): WithdrawalApiResponse = sendWithReAuth { tryGetWithdrawal(id).throwOrReturn() }
 
-    fun listWithdrawals(): ListWithdrawalsApiResponse = tryListWithdrawals().throwOrReturn()
+    fun listWithdrawals(): ListWithdrawalsApiResponse = sendWithReAuth { tryListWithdrawals().throwOrReturn() }
 
-    fun getBalances(): BalancesApiResponse = tryGetBalances().throwOrReturn()
+    fun getBalances(): BalancesApiResponse = sendWithReAuth { tryGetBalances().throwOrReturn() }
 
-    fun authorizeWallet(apiRequest: AuthorizeWalletApiRequest) = tryAuthorizeWallet(apiRequest).throwOrReturn()
+    fun authorizeWallet(apiRequest: AuthorizeWalletApiRequest) = sendWithReAuth { tryAuthorizeWallet(apiRequest).throwOrReturn() }
 
-    fun getAccountConfiguration() = tryGetAccountConfiguration().throwOrReturn()
+    fun getAccountConfiguration() = sendWithReAuth { tryGetAccountConfiguration().throwOrReturn() }
 
     // Helper methods
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()
@@ -394,12 +409,16 @@ class FunkybitApiClient(
 
 class MaintenanceMode : Exception()
 
+class Unauthenticated : Exception()
+
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
     if (this.isLeft()) {
         val apiCallFailure = this.leftOrNull()!!
         if (apiCallFailure.httpCode == 418) {
             throw MaintenanceMode()
+        } else if (apiCallFailure.httpCode == 401) {
+            throw Unauthenticated()
         }
         throw Exception("HTTP ${apiCallFailure.httpCode}: ${apiCallFailure.error?.displayMessage ?: "Unknown Error"}")
     }
