@@ -407,9 +407,9 @@ class FunkybitApiClient(
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()
 }
 
-class MaintenanceMode : Exception()
+class MaintenanceMode : RuntimeException()
 
-class Unauthenticated : Exception()
+class Unauthenticated : RuntimeException()
 
 // Helper extension functions
 fun <T> Either<ApiCallFailure, T>.throwOrReturn(): T {
