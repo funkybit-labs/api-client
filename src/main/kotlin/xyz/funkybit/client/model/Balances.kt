@@ -2,6 +2,7 @@ package xyz.funkybit.client.model
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import xyz.funkybit.client.utils.BigDecimalJson
 import xyz.funkybit.client.utils.BigIntegerJson
 
 @Serializable
@@ -10,6 +11,7 @@ data class Balance(
     val total: BigIntegerJson,
     val available: BigIntegerJson,
     val lastUpdated: Instant,
+    val usdcValue: BigDecimalJson
 )
 
 @Serializable
