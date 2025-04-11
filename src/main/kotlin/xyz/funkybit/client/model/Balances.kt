@@ -11,7 +11,7 @@ data class Balance(
     val total: BigIntegerJson,
     val available: BigIntegerJson,
     val lastUpdated: Instant,
-    val usdcValue: BigDecimalJson
+    val usdcValue: BigDecimalJson,
 )
 
 @Serializable
