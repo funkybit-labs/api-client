@@ -41,7 +41,7 @@ data class AuthorizedAddress(
 data class AccountConfigurationApiResponse(
     val id: UserId,
     val newSymbols: List<SymbolInfo>,
-    val associatedCoins: List<Coin>,
+    val associatedSymbols: List<SymbolInfo>,
     val role: Role,
     val authorizedAddresses: List<AuthorizedAddress>,
     val nickName: String?,
