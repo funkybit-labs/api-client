@@ -42,10 +42,20 @@ class ReconnectingWebsocketClient(
         startHeartbeat()
     }
 
-    private fun newWebsocket() =
-        blocking(
-            uri = Uri.of(apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect" + (auth?.let { "?auth=$auth" } ?: "")),
-        )
+    private fun newWebsocket(): WsClient {
+        logger.info { " Connecting to websocket ${apiUrl.replace("http:", "ws:").replace("https:", "wss:")}" }
+        return blocking(
+            uri =
+                Uri.of(
+                    apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect" + (
+                        auth?.let { "?auth=$auth" }
+                            ?: ""
+                    ),
+                ),
+        ).also {
+            logger.info { "Successfully connected to the websocket" }
+        }
+    }
 
     private fun startHeartbeat() {
         heartbeatThread =
@@ -63,6 +73,7 @@ class ReconnectingWebsocketClient(
                         }
                     } catch (e: InterruptedException) {
                         // Thread was interrupted, likely during shutdown
+                        logger.info { "Heartbeat thread interrupted" }
                         break
                     } catch (e: Exception) {
                         // Log heartbeat error but don't reconnect here as withReconnection already handles it
@@ -232,6 +243,7 @@ class ReconnectingWebsocketClient(
         }
 
     fun close(status: WsStatus = WsStatus.NORMAL) {
+        logger.info { "Websocket is being closed" }
         isRunning = false
         heartbeatThread?.interrupt()
         heartbeatThread?.join(100L)
