@@ -44,6 +44,7 @@ import xyz.funkybit.client.model.OrderStatus
 import xyz.funkybit.client.model.OrdersApiResponse
 import xyz.funkybit.client.model.ReasonCode
 import xyz.funkybit.client.model.SignInMessage
+import xyz.funkybit.client.model.TradesApiResponse
 import xyz.funkybit.client.model.WithdrawalApiResponse
 import xyz.funkybit.client.model.WithdrawalId
 import xyz.funkybit.client.utils.ECHelper
@@ -358,6 +359,30 @@ class FunkybitApiClient(
                 .withAuthHeaders(authToken),
         ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
 
+    fun tryListTrades(
+        beforeTimestamp: Instant? = null,
+        limit: Int? = null,
+    ): Either<ApiCallFailure, TradesApiResponse> =
+        execute(
+            Request
+                .Builder()
+                .url(
+                    "$apiServerRootUrl/v1/trades"
+                        .toHttpUrl()
+                        .newBuilder()
+                        .apply {
+                            if (beforeTimestamp != null) {
+                                addQueryParameter("before-timestamp", beforeTimestamp.toString())
+                            }
+                            if (limit != null) {
+                                addQueryParameter("limit", limit.toString())
+                            }
+                        }.build(),
+                ).get()
+                .build()
+                .withAuthHeaders(authToken),
+        ).toErrorOrPayload(expectedStatusCode = HttpURLConnection.HTTP_OK)
+
     fun getConfiguration(): ConfigurationApiResponse = sendWithReAuth { tryGetConfiguration().throwOrReturn() }
 
     fun createOrder(apiRequest: CreateOrderApiRequest): CreateOrderApiResponse =
@@ -402,6 +427,13 @@ class FunkybitApiClient(
     fun authorizeWallet(apiRequest: AuthorizeWalletApiRequest) = sendWithReAuth { tryAuthorizeWallet(apiRequest).throwOrReturn() }
 
     fun getAccountConfiguration() = sendWithReAuth { tryGetAccountConfiguration().throwOrReturn() }
+
+    fun listTrades(
+        beforeTimestamp: Instant? = null,
+        limit: Int? = null,
+    ) = sendWithReAuth {
+        tryListTrades(beforeTimestamp, limit).throwOrReturn()
+    }
 
     // Helper methods
     private fun execute(request: Request): Response = httpClient.newCall(request).execute()

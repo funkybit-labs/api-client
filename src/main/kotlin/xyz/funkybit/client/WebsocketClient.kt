@@ -30,13 +30,12 @@ class ReconnectingWebsocketClient(
     private val apiUrl: String,
     private val auth: String?,
 ) {
+    private val logger = KotlinLogging.logger {}
     private val activeSubscriptions = CopyOnWriteArraySet<SubscriptionTopic>()
     private var websocket = newWebsocket()
     private var heartbeatThread: Thread? = null
     private var isRunning = true
     private var inMaintenanceMode = false
-
-    private val logger = KotlinLogging.logger {}
 
     init {
         startHeartbeat()

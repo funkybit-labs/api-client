@@ -33,6 +33,7 @@ import xyz.funkybit.client.model.SettlementStatus;
 import xyz.funkybit.client.model.SubscriptionTopic;
 import xyz.funkybit.client.model.SymbolInfo;
 import xyz.funkybit.client.model.Trade;
+import xyz.funkybit.client.model.TradesApiResponse;
 import xyz.funkybit.client.model.UpdatedBalance;
 import xyz.funkybit.client.model.address.EvmAddress;
 import xyz.funkybit.client.model.signature.EvmSignature;
@@ -296,6 +297,12 @@ public class FunkybitClientExample {
                     }
                 }
             }
+            TradesApiResponse trades = client.listTrades(null, null);
+            System.out.println("Found " + trades.getTrades().size() + " trades");
+            for (Trade trade : trades.getTrades()) {
+                System.out.println("Trade " + trade.getId() + " (client order id " + trade.getClientOrderId() + "): " + trade.getSide() + " " + trade.getAmount() + " of market " + trade.getMarketId() + " at " + trade.getPrice());
+            }
+
 
             // Cancel all orders
             System.out.println("Cancelling all orders...");

@@ -282,6 +282,11 @@ fun main() {
                 }
             }
         }
+        val trades = client.listTrades()
+        println("Found ${trades.trades.size}")
+        trades.trades.forEach {
+            println("Trade ${it.id} (client order id ${it.clientOrderId}): ${it.side} ${it.amount} of market ${it.marketId} at ${it.price}")
+        }
 
         // Cancel all orders
         println("Cancelling all orders...")
