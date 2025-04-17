@@ -107,7 +107,7 @@ public class FunkybitClientExample {
         );
 
         // Connect to WebSocket for real-time updates
-        ReconnectingWebsocketClient webSocket = client.newWebSocket(client.getAuthToken());
+        ReconnectingWebsocketClient webSocket = client.newWebSocket();
 
         try {
             Chain evmChain = config.getEvmChains().get(0);
