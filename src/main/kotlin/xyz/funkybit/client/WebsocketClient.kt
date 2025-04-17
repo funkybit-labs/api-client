@@ -28,7 +28,7 @@ val json =
 
 class ReconnectingWebsocketClient(
     private val apiUrl: String,
-    private val auth: String?,
+    private val client: FunkybitApiClient,
 ) {
     private val logger = KotlinLogging.logger {}
     private val activeSubscriptions = CopyOnWriteArraySet<SubscriptionTopic>()
@@ -46,10 +46,7 @@ class ReconnectingWebsocketClient(
         return blocking(
             uri =
                 Uri.of(
-                    apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect" + (
-                        auth?.let { "?auth=$auth" }
-                            ?: ""
-                    ),
+                    apiUrl.replace("http:", "ws:").replace("https:", "wss:") + "/connect?auth=${client.authToken}",
                 ),
         ).also {
             logger.info { "Successfully connected to the websocket" }
@@ -103,6 +100,7 @@ class ReconnectingWebsocketClient(
                         if (inMaintenanceMode) {
                             1000L
                         } else {
+                            client.reissueAuthToken()
                             // (quick) exponential backoff with jitter
                             val baseDelay = (2 * 1.05.pow(retryCount.toDouble())).coerceAtMost(5000.0).toLong()
                             val jitter = Random.nextLong(baseDelay / 2)

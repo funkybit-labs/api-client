@@ -80,7 +80,7 @@ fun main() {
     println("Bitcoin wallet ${bitcoinWallet.walletAddress} authorized")
 
     // Connect to WebSocket for real-time updates
-    val webSocket = client.newWebSocket(client.authToken)
+    val webSocket = client.newWebSocket()
 
     try {
         val evmChain = config.evmChains.first()
