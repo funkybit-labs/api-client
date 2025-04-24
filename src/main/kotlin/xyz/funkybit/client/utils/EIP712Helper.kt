@@ -68,13 +68,13 @@ object EIP712Helper {
                     "EIP712Domain" to
                         listOf(
                             StructuredData.Entry("name", "string"),
-                            StructuredData.Entry("chainId", "uint32"),
+                            StructuredData.Entry("chainId", "uint256"),
                         ),
                     "Sign In" to
                         listOf(
                             StructuredData.Entry("message", "string"),
                             StructuredData.Entry("address", "string"),
-                            StructuredData.Entry("chainId", "uint32"),
+                            StructuredData.Entry("chainId", "uint256"),
                             StructuredData.Entry("timestamp", "string"),
                             StructuredData.Entry("sessionKeyAddress", "string"),
                         ),
@@ -121,14 +121,14 @@ object EIP712Helper {
                     "EIP712Domain" to
                         listOf(
                             StructuredData.Entry("name", "string"),
-                            StructuredData.Entry("chainId", "uint32"),
+                            StructuredData.Entry("chainId", "uint256"),
                         ),
                     "Authorize" to
                         listOf(
                             StructuredData.Entry("message", "string"),
                             StructuredData.Entry("address", "string"),
                             StructuredData.Entry("authorizedAddress", "string"),
-                            StructuredData.Entry("chainId", "uint32"),
+                            StructuredData.Entry("chainId", "uint256"),
                             StructuredData.Entry("timestamp", "string"),
                         ),
                 ),
