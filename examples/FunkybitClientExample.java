@@ -35,7 +35,7 @@ import xyz.funkybit.client.model.SymbolInfo;
 import xyz.funkybit.client.model.Trade;
 import xyz.funkybit.client.model.TradesApiResponse;
 import xyz.funkybit.client.model.UpdatedBalance;
-import xyz.funkybit.client.model.address.EvmAddress;
+import xyz.funkybit.client.model.address.BitcoinAddress;
 import xyz.funkybit.client.model.signature.EvmSignature;
 
 import java.math.BigDecimal;
@@ -66,60 +66,63 @@ public class FunkybitClientExample {
         BigDecimal makerBaseAmount = new BigDecimal("0.0001");
         String price = "100000.0";
         BigDecimal takerQuoteAmount = new BigDecimal("6");
-        
+
         // Create a client with a wallet
         // Example key - replace with your own
         String privateKey = System.getenv("FUNKYBIT_PRIVATE_KEY");
         if (privateKey == null) {
             privateKey = "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3";
         }
-        
+
+        // create bitcoin wallet
+        WalletKeyPair.Bitcoin bitcoinKeyPair = WalletKeyPair.Bitcoin.Companion.fromPrivateKeyHex(privateKey, getBitcoinConfig().getParams());
+        FunkybitApiClient bitcoinClient = new FunkybitApiClient(
+                bitcoinKeyPair,
+                endpoint,
+                BITCOIN,
+                WalletKeyPair.EVM.Companion.generate()
+        );
+        ConfigurationApiResponse config = bitcoinClient.getConfiguration();
+        BitcoinWallet bitcoinWallet = new BitcoinWallet(bitcoinKeyPair, config.getChains(), bitcoinClient);
+        AccountConfigurationApiResponse accountConfig = bitcoinClient.getAccountConfiguration();
+
+        System.out.println("Connected with Bitcoin wallet " + bitcoinWallet.getAddress());
+
         WalletKeyPair.EVM evmKeyPair = WalletKeyPair.EVM.Companion.fromPrivateKeyHex(privateKey);
-        FunkybitApiClient client = new FunkybitApiClient(
+        FunkybitApiClient evmClient = new FunkybitApiClient(
                 evmKeyPair,
                 endpoint,
                 "1",
                 WalletKeyPair.EVM.Companion.generate()
         );
-        Wallet wallet = Wallet.Companion.invoke(client);
-        System.out.println("Connected with address: " + client.getAddress());
+        Wallet evmWallet = Wallet.Companion.invoke(evmClient);
 
-        ConfigurationApiResponse config = client.getConfiguration();
-        AccountConfigurationApiResponse accountConfig = client.getAccountConfiguration();
-
-        // authorize bitcoin wallet
-        WalletKeyPair.Bitcoin btcKeyPair = WalletKeyPair.Bitcoin.Companion.fromPrivateKeyHex(privateKey, getBitcoinConfig().getParams());
-        FunkybitApiClient bitcoinClient = new FunkybitApiClient(
-            btcKeyPair, 
-            endpoint,
-            BITCOIN,
-            WalletKeyPair.EVM.Companion.generate()
+        evmClient.authorizeWallet(
+                bitcoinWallet.signAuthorizeEvmWalletRequest(
+                        bitcoinKeyPair.getEcKey(),
+                        (BitcoinAddress) bitcoinClient.getAddress(),
+                        evmWallet.getEvmAddress(),
+                        BITCOIN,
+                        Clock.System.INSTANCE.now(),
+                        false
+                )
         );
-        BitcoinWallet bitcoinWallet = new BitcoinWallet(btcKeyPair, config.getChains(), bitcoinClient);
-        bitcoinClient.authorizeWallet(
-            bitcoinWallet.signAuthorizeBitcoinWalletRequest(
-                evmKeyPair.getEcKeyPair(),
-                (EvmAddress) client.getAddress(),
-                bitcoinWallet.getWalletAddress(),
-                wallet.getCurrentChainId(),
-                Clock.System.INSTANCE.now()
-            )
-        );
+        System.out.println("EVM wallet " + evmWallet.getAddress() + " authorized");
 
         // Connect to WebSocket for real-time updates
-        ReconnectingWebsocketClient webSocket = client.newWebSocket();
+        ReconnectingWebsocketClient webSocket = evmClient.newWebSocket();
 
         try {
             Chain evmChain = config.getEvmChains().get(0);
-            client.switchChain(evmChain.getId());
-            
+            evmClient.switchChain(evmChain.getId());
+
             SymbolInfo baseSymbol;
             if (baseIsOnBitcoin) {
                 baseSymbol = findSymbol(config.getBitcoinChain().getSymbols(), base + ":" + BITCOIN);
             } else {
                 baseSymbol = findSymbol(evmChain.getSymbols(), base + ":" + evmChain.getId());
             }
-            
+
             SymbolInfo quoteSymbol;
             if (quoteIsOnBitcoin) {
                 quoteSymbol = findSymbol(config.getBitcoinChain().getSymbols(), quote + ":" + BITCOIN);
@@ -133,24 +136,24 @@ public class FunkybitClientExample {
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
             // Get initial base balance
-            List<Balance> initialBalances = client.getBalances().getBalances();
+            List<Balance> initialBalances = evmClient.getBalances().getBalances();
             BigInteger initialBaseBalance = findBalance(initialBalances, baseSymbol);
             System.out.println("Initial " + base + " balance: " + initialBaseBalance);
 
             // Deposit base for the limit sell
-            AssetAmount walletBaseBalance = wallet.getWalletBalance(baseSymbol);
+            AssetAmount walletBaseBalance = evmWallet.getWalletBalance(baseSymbol);
             if (walletBaseBalance.getAmount().compareTo(makerBaseAmount) < 0) {
                 throw new RuntimeException(
-                    "Need at least " + makerBaseAmount + " " + base + " in " + 
-                    (baseIsOnBitcoin ? bitcoinClient.getAddress() : client.getAddress()) + 
-                    " on chain " + (baseIsOnBitcoin ? BITCOIN : evmChain.getId())
+                        "Need at least " + makerBaseAmount + " " + base + " in " +
+                                (baseIsOnBitcoin ? bitcoinClient.getAddress() : evmClient.getAddress()) +
+                                " on chain " + (baseIsOnBitcoin ? BITCOIN : evmChain.getId())
                 );
             }
-            
+
             if (baseIsOnBitcoin) {
                 bitcoinWallet.depositNative(toFundamentalUnits(makerBaseAmount, 8));
             } else {
-                wallet.deposit(new AssetAmount(baseSymbol, makerBaseAmount));
+                evmWallet.deposit(new AssetAmount(baseSymbol, makerBaseAmount));
             }
             System.out.println("Deposited " + makerBaseAmount + " " + base);
 
@@ -170,42 +173,42 @@ public class FunkybitClientExample {
 
             // Place a limit sell order
             CreateOrderApiRequest.Limit sellOrder = new CreateOrderApiRequest.Limit(
-                generateOrderNonce(),
-                market.getId(),
-                OrderSide.Sell,
-                new OrderAmount.Fixed(toFundamentalUnits(makerBaseAmount, baseSymbol.getDecimals())),
-                new BigDecimal(price),
-                EvmSignature.Companion.emptySignature(),
-                evmKeyPair.address().getValue(),
-                evmChain.getId(),
-                "example-sell-" + System.currentTimeMillis(),
-                "recaptcha-token",
+                    generateOrderNonce(),
+                    market.getId(),
+                    OrderSide.Sell,
+                    new OrderAmount.Fixed(toFundamentalUnits(makerBaseAmount, baseSymbol.getDecimals())),
+                    new BigDecimal(price),
+                    EvmSignature.Companion.emptySignature(),
+                    evmKeyPair.address().getValue(),
+                    evmChain.getId(),
+                    "example-sell-" + System.currentTimeMillis(),
+                    "recaptcha-token",
                     false
             );
 
-            CreateOrderApiRequest signedSellOrder = wallet.signOrder(sellOrder, null);
+            CreateOrderApiRequest signedSellOrder = evmWallet.signOrder(sellOrder, null);
             System.out.println("Placing limit sell order...");
-            CreateOrderApiResponse sellResponse = client.createOrder(signedSellOrder);
+            CreateOrderApiResponse sellResponse = evmClient.createOrder(signedSellOrder);
             System.out.println("Limit sell order placed: " + sellResponse.getOrder());
 
             // Wait for order created confirmation
             System.out.println("Waiting for order created...");
             waitForOrderCreated(webSocket, sellResponse.getOrder().getClientOrderId());
-            
-            AssetAmount walletQuoteBalance = wallet.getWalletBalance(quoteSymbol);
+
+            AssetAmount walletQuoteBalance = evmWallet.getWalletBalance(quoteSymbol);
             if (walletQuoteBalance.getAmount().compareTo(takerQuoteAmount) < 0) {
                 throw new RuntimeException(
-                    "Need at least " + takerQuoteAmount + " " + quote + " in " + 
-                    (quoteIsOnBitcoin ? bitcoinClient.getAddress() : client.getAddress()) + 
-                    " on chain " + (quoteIsOnBitcoin ? BITCOIN : evmChain.getId())
+                        "Need at least " + takerQuoteAmount + " " + quote + " in " +
+                                (quoteIsOnBitcoin ? bitcoinClient.getAddress() : evmClient.getAddress()) +
+                                " on chain " + (quoteIsOnBitcoin ? BITCOIN : evmChain.getId())
                 );
             }
-            
+
             // Deposit quote for the market buy
             if (quoteIsOnBitcoin) {
                 bitcoinWallet.depositNative(toFundamentalUnits(takerQuoteAmount, 8));
             } else {
-                wallet.deposit(new AssetAmount(quoteSymbol, takerQuoteAmount));
+                evmWallet.deposit(new AssetAmount(quoteSymbol, takerQuoteAmount));
             }
             System.out.println("Deposited " + takerQuoteAmount + " " + quote);
 
@@ -215,7 +218,7 @@ public class FunkybitClientExample {
             waitForSubscription(webSocket, message -> message instanceof Balances);
 
             // Get initial quote balance
-            BigInteger initialQuoteBalance = findBalance(client.getBalances().getBalances(), quoteSymbol);
+            BigInteger initialQuoteBalance = findBalance(evmClient.getBalances().getBalances(), quoteSymbol);
             System.out.println("Initial " + quote + " balance: " + initialQuoteBalance);
 
             // Wait for quote balance to increase
@@ -231,22 +234,22 @@ public class FunkybitClientExample {
             // Place a market buy order
             BigDecimal halfMakerBaseAmount = makerBaseAmount.divide(BigDecimal.valueOf(2L), baseSymbol.getDecimals(), RoundingMode.HALF_UP);
             CreateOrderApiRequest.Market marketBuyOrder = new CreateOrderApiRequest.Market(
-                generateOrderNonce(),
-                market.getId(),
-                OrderSide.Buy,
-                new OrderAmount.Fixed(toFundamentalUnits(halfMakerBaseAmount, baseSymbol.getDecimals())),
-                EvmSignature.Companion.emptySignature(),
-                evmKeyPair.address().getValue(),
-                evmChain.getId(),
-                "example-market-buy-" + System.currentTimeMillis(),
-                "recaptcha-token",
-                null,
-                null
+                    generateOrderNonce(),
+                    market.getId(),
+                    OrderSide.Buy,
+                    new OrderAmount.Fixed(toFundamentalUnits(halfMakerBaseAmount, baseSymbol.getDecimals())),
+                    EvmSignature.Companion.emptySignature(),
+                    evmKeyPair.address().getValue(),
+                    evmChain.getId(),
+                    "example-market-buy-" + System.currentTimeMillis(),
+                    "recaptcha-token",
+                    null,
+                    null
             );
 
-            CreateOrderApiRequest signedMarketBuyOrder = wallet.signOrder(marketBuyOrder, false);
+            CreateOrderApiRequest signedMarketBuyOrder = evmWallet.signOrder(marketBuyOrder, false);
             System.out.println("Placing market buy order...");
-            CreateOrderApiResponse buyResponse = client.createOrder(signedMarketBuyOrder);
+            CreateOrderApiResponse buyResponse = evmClient.createOrder(signedMarketBuyOrder);
             System.out.println("Market buy order placed: " + buyResponse.getOrder());
 
             // Wait for market buy order created confirmation
@@ -264,7 +267,7 @@ public class FunkybitClientExample {
                 OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
                 if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
-                    
+
                     if (data instanceof MyOrdersUpdated ordersUpdated) {
                         for (Order order : ordersUpdated.getOrders()) {
                             if (order.getClientOrderId() != null && order.getClientOrderId().equals(sellResponse.getOrder().getClientOrderId())) {
@@ -297,7 +300,7 @@ public class FunkybitClientExample {
                     }
                 }
             }
-            TradesApiResponse trades = client.listTrades(null, null);
+            TradesApiResponse trades = evmClient.listTrades(null, null);
             System.out.println("Found " + trades.getTrades().size() + " trades");
             for (Trade trade : trades.getTrades()) {
                 System.out.println("Trade " + trade.getId() + " (client order id " + trade.getClientOrderId() + "): " + trade.getSide() + " " + trade.getAmount() + " of market " + trade.getMarketId() + " at " + trade.getPrice());
@@ -306,9 +309,9 @@ public class FunkybitClientExample {
 
             // Cancel all orders
             System.out.println("Cancelling all orders...");
-            List<Order> orders = client.listOrders(Collections.emptyList(), market.getId()).getOrders();
-            client.cancelOpenOrders(List.of(market.getId()));
-            
+            List<Order> orders = evmClient.listOrders(Collections.emptyList(), market.getId()).getOrders();
+            evmClient.cancelOpenOrders(List.of(market.getId()));
+
             for (Order order : orders) {
                 if (order.getStatus() == OrderStatus.Open) {
                     System.out.println("Cancelling order: " + order.getClientOrderId());
@@ -320,11 +323,11 @@ public class FunkybitClientExample {
 
             // Get final balances
             System.out.println("Retrieving final balances...");
-            List<Balance> balances = client.getBalances().getBalances();
+            List<Balance> balances = evmClient.getBalances().getBalances();
             System.out.println("Final balances:");
             for (Balance balance : balances) {
-                System.out.println(balance.getSymbol() + ": " + balance.getTotal() + 
-                    " (" + balance.getAvailable() + " available)");
+                System.out.println(balance.getSymbol() + ": " + balance.getTotal() +
+                        " (" + balance.getAvailable() + " available)");
             }
 
             // Subscribe to balance updates
@@ -338,13 +341,13 @@ public class FunkybitClientExample {
                 Balance balance = findBalanceBySymbol(balances, symbol);
                 if (balance != null && balance.getAvailable().compareTo(BigInteger.ZERO) > 0) {
                     System.out.println("Withdrawing " + balance.getAvailable() + " " + balance.getSymbol());
-                    if ((baseIsOnBitcoin && symbol.equals(baseSymbol)) || 
-                        (quoteIsOnBitcoin && symbol.equals(quoteSymbol))) {
+                    if ((baseIsOnBitcoin && symbol.equals(baseSymbol)) ||
+                            (quoteIsOnBitcoin && symbol.equals(quoteSymbol))) {
                         bitcoinClient.createWithdrawal(
-                            bitcoinWallet.signWithdraw(symbol, balance.getAvailable())
+                                bitcoinWallet.signWithdraw(symbol, balance.getAvailable())
                         );
                     } else {
-                        wallet.withdraw(new AssetAmount(symbol, balance.getAvailable()));
+                        evmWallet.withdraw(new AssetAmount(symbol, balance.getAvailable()));
                     }
                 }
             }
@@ -359,21 +362,21 @@ public class FunkybitClientExample {
                 OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
                 if (message instanceof OutgoingWSMessage.Publish publish) {
                     Publishable data = publish.getData();
-                    
+
                     if (data instanceof BalancesUpdated balancesUpdated) {
                         for (UpdatedBalance balance : balancesUpdated.getBalances()) {
-                            System.out.println("Balance updated: " + balance.getSymbol() + ": " + 
-                                balance.getValue() + " (" + balance.getType() + ")");
-                            
+                            System.out.println("Balance updated: " + balance.getSymbol() + ": " +
+                                    balance.getValue() + " (" + balance.getType() + ")");
+
                             String symbolName = balance.getSymbol();
                             if (symbolName.equals(baseSymbol.getName())) {
-                                if (balance.getType() == BalanceType.Available && 
-                                    balance.getValue().equals(BigInteger.ZERO)) {
+                                if (balance.getType() == BalanceType.Available &&
+                                        balance.getValue().equals(BigInteger.ZERO)) {
                                     baseWithdrawn = true;
                                 }
                             } else if (symbolName.equals(quoteSymbol.getName())) {
-                                if (balance.getType() == BalanceType.Available && 
-                                    balance.getValue().equals(BigInteger.ZERO)) {
+                                if (balance.getType() == BalanceType.Available &&
+                                        balance.getValue().equals(BigInteger.ZERO)) {
                                     quoteWithdrawn = true;
                                 }
                             }
@@ -387,7 +390,7 @@ public class FunkybitClientExample {
             System.out.println("Limit sell filled: " + limitSellFilled);
             System.out.println("Market buy filled: " + marketBuyFilled);
             System.out.println("Trade settled: " + tradeSettled);
-            
+
         } catch (Exception e) {
             System.out.println("Error: " + e.getMessage());
             e.printStackTrace();
@@ -410,7 +413,7 @@ public class FunkybitClientExample {
     private static Market findMarket(List<Market> markets, String baseSymbol, String quoteSymbol) {
         for (Market market : markets) {
             if (market.getBaseSymbol().equals(baseSymbol) &&
-                market.getQuoteSymbol().equals(quoteSymbol)) {
+                    market.getQuoteSymbol().equals(quoteSymbol)) {
                 return market;
             }
         }
@@ -436,8 +439,8 @@ public class FunkybitClientExample {
     }
 
     private static void waitForSubscription(
-        ReconnectingWebsocketClient webSocket,
-        Predicate<Publishable> predicate
+            ReconnectingWebsocketClient webSocket,
+            Predicate<Publishable> predicate
     ) {
         while (true) {
             OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
@@ -451,14 +454,14 @@ public class FunkybitClientExample {
     }
 
     private static void waitForOrderCreated(
-        ReconnectingWebsocketClient webSocket,
-        String orderId
+            ReconnectingWebsocketClient webSocket,
+            String orderId
     ) {
         while (true) {
             OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
-                
+
                 if (data instanceof MyOrdersCreated ordersCreated) {
                     for (Order order : ordersCreated.getOrders()) {
                         if (order.getClientOrderId().equals(orderId)) {
@@ -472,18 +475,18 @@ public class FunkybitClientExample {
     }
 
     private static void waitForOrderCancelled(
-        ReconnectingWebsocketClient webSocket,
-        String orderId
+            ReconnectingWebsocketClient webSocket,
+            String orderId
     ) {
         while (true) {
             OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
-                
+
                 if (data instanceof MyOrdersUpdated ordersUpdated) {
                     for (Order order : ordersUpdated.getOrders()) {
-                        if (order.getClientOrderId().equals(orderId) && 
-                            order.getStatus() == OrderStatus.Cancelled) {
+                        if (order.getClientOrderId().equals(orderId) &&
+                                order.getStatus() == OrderStatus.Cancelled) {
                             System.out.println("Order cancelled: " + ordersUpdated);
                             return;
                         }
@@ -494,21 +497,21 @@ public class FunkybitClientExample {
     }
 
     private static void waitForBalanceIncrease(
-        ReconnectingWebsocketClient webSocket,
-        SymbolInfo symbol,
-        BigInteger initialBalance
+            ReconnectingWebsocketClient webSocket,
+            SymbolInfo symbol,
+            BigInteger initialBalance
     ) {
         System.out.println("Waiting for " + symbol + " deposit to complete...");
         while (true) {
             OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
             if (message instanceof OutgoingWSMessage.Publish publish) {
                 Publishable data = publish.getData();
-                
+
                 if (data instanceof BalancesUpdated balancesUpdated) {
                     for (UpdatedBalance balance : balancesUpdated.getBalances()) {
                         if (balance.getSymbol().equals(symbol.getName()) &&
-                            balance.getType() == BalanceType.Available) {
-                            
+                                balance.getType() == BalanceType.Available) {
+
                             System.out.println(symbol + " balance updated: " + balance.getValue());
                             if (balance.getValue().compareTo(initialBalance) > 0) {
                                 System.out.println(symbol + " deposit completed");

@@ -30,7 +30,7 @@ import xyz.funkybit.client.model.Publishable
 import xyz.funkybit.client.model.SettlementStatus
 import xyz.funkybit.client.model.SubscriptionTopic
 import xyz.funkybit.client.model.SymbolInfo
-import xyz.funkybit.client.model.address.EvmAddress
+import xyz.funkybit.client.model.address.BitcoinAddress
 import xyz.funkybit.client.model.signature.EvmSignature
 import xyz.funkybit.client.utils.generateOrderNonce
 import xyz.funkybit.client.utils.toFundamentalUnits
@@ -53,38 +53,35 @@ fun main() {
     // Create a client with a wallet
     // Example key - replace with your own
     val privateKey = System.getenv("FUNKYBIT_PRIVATE_KEY") ?: "0x1198d5fcb2d6c0fc1c7225f4b76d598fd029229557277b4952e0bafd899cc3d3"
+
+    // create bitcoin wallet
+    val bitcoinKeyPair = WalletKeyPair.Bitcoin.fromPrivateKeyHex(privateKey, bitcoinConfig.params)
+    val bitcoinClient = FunkybitApiClient(keyPair = bitcoinKeyPair, apiUrl = endpoint, chainId = BITCOIN)
+    val config = bitcoinClient.getConfiguration()
+    val bitcoinWallet = BitcoinWallet(bitcoinKeyPair, config.chains, bitcoinClient)
+    val accountConfig = bitcoinClient.getAccountConfiguration()
+
+    println("Connected with Bitcoin address: ${bitcoinWallet.address}")
+
     val evmKeyPair = WalletKeyPair.EVM.fromPrivateKeyHex(privateKey)
-    val client =
-        FunkybitApiClient(
-            keyPair = evmKeyPair,
-            apiUrl = endpoint,
-        )
-    val wallet = Wallet(client)
-    println("Connected with address: ${client.address}")
+    val evmClient = FunkybitApiClient(keyPair = evmKeyPair, apiUrl = endpoint)
+    val evmWallet = Wallet(evmClient)
 
-    val config = client.getConfiguration()
-    val accountConfig = client.getAccountConfiguration()
-
-    // authorize bitcoin wallet
-    val btcKeyPair = WalletKeyPair.Bitcoin.fromPrivateKeyHex(privateKey, bitcoinConfig.params)
-    val bitcoinClient = FunkybitApiClient(keyPair = btcKeyPair, apiUrl = endpoint, chainId = BITCOIN)
-    val bitcoinWallet = BitcoinWallet(btcKeyPair, config.chains, bitcoinClient)
-    bitcoinClient.authorizeWallet(
-        bitcoinWallet.signAuthorizeBitcoinWalletRequest(
-            evmKeyPair.ecKeyPair,
-            client.address as EvmAddress,
-            bitcoinWallet.walletAddress,
-            wallet.currentChainId,
+    evmClient.authorizeWallet(
+        bitcoinWallet.signAuthorizeEvmWalletRequest(
+            bitcoinKeyPair.ecKey,
+            bitcoinClient.address as BitcoinAddress,
+            evmWallet.evmAddress,
         ),
     )
-    println("Bitcoin wallet ${bitcoinWallet.walletAddress} authorized")
+    println("EVM wallet ${evmWallet.address} authorized")
 
     // Connect to WebSocket for real-time updates
-    val webSocket = client.newWebSocket()
+    val webSocket = evmClient.newWebSocket()
 
     try {
         val evmChain = config.evmChains.first()
-        client.switchChain(evmChain.id)
+        evmClient.switchChain(evmChain.id)
         val baseSymbol =
             if (baseIsOnBitcoin) {
                 config.bitcoinChain.symbols.first { it.name == "$base:$BITCOIN" }
@@ -110,21 +107,21 @@ fun main() {
         waitForSubscription(webSocket) { it is Balances }
 
         // Get initial base balance
-        val initialBalances = client.getBalances().balances
+        val initialBalances = evmClient.getBalances().balances
         val initialBaseBalance = initialBalances.firstOrNull { it.symbol == baseSymbol.name }?.available ?: BigInteger.ZERO
         println("Initial $base balance: $initialBaseBalance")
 
         // Deposit base for the limit sell
-        val walletBaseBalance = wallet.getWalletBalance(baseSymbol)
+        val walletBaseBalance = evmWallet.getWalletBalance(baseSymbol)
         if (walletBaseBalance.amount < makerBaseAmount) {
             throw RuntimeException(
-                "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id}",
+                "Need at least $makerBaseAmount $base in ${if (baseIsOnBitcoin) bitcoinClient.address else evmClient.address} on chain ${if (baseIsOnBitcoin) BITCOIN else evmChain.id}",
             )
         }
         if (baseIsOnBitcoin) {
             bitcoinWallet.depositNative(makerBaseAmount.toFundamentalUnits(8))
         } else {
-            wallet.deposit(AssetAmount(baseSymbol, makerBaseAmount))
+            evmWallet.deposit(AssetAmount(baseSymbol, makerBaseAmount))
         }
         println("Deposited $makerBaseAmount $base")
 
@@ -161,25 +158,25 @@ fun main() {
                 cancelSide = false,
             )
 
-        val signedSellOrder = wallet.signOrder(sellOrder)
+        val signedSellOrder = evmWallet.signOrder(sellOrder)
         println("Placing limit sell order...")
-        val sellResponse = client.createOrder(signedSellOrder)
+        val sellResponse = evmClient.createOrder(signedSellOrder)
         println("Limit sell order placed: ${sellResponse.order}")
 
         // Wait for order created confirmation
         println("Waiting for order created...")
         waitForOrderCreated(webSocket, sellResponse.order.clientOrderId)
-        val walletQuoteBalance = wallet.getWalletBalance(quoteSymbol)
+        val walletQuoteBalance = evmWallet.getWalletBalance(quoteSymbol)
         if (walletQuoteBalance.amount < takerQuoteAmount) {
             throw RuntimeException(
-                "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else client.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id}",
+                "Need at least $takerQuoteAmount $quote in ${if (quoteIsOnBitcoin) bitcoinClient.address else evmClient.address} on chain ${if (quoteIsOnBitcoin) BITCOIN else evmChain.id}",
             )
         }
         // Deposit quote for the market buy
         if (quoteIsOnBitcoin) {
             bitcoinWallet.depositNative(takerQuoteAmount.toFundamentalUnits(8))
         } else {
-            wallet.deposit(AssetAmount(quoteSymbol, takerQuoteAmount))
+            evmWallet.deposit(AssetAmount(quoteSymbol, takerQuoteAmount))
         }
         println("Deposited $takerQuoteAmount $quote")
 
@@ -190,7 +187,7 @@ fun main() {
 
         // Get initial quote balance
         val initialQuoteBalance =
-            client
+            evmClient
                 .getBalances()
                 .balances
                 .firstOrNull { it.symbol == quoteSymbol.name }
@@ -224,9 +221,9 @@ fun main() {
                 captchaToken = "recaptcha-token",
             )
 
-        val signedMarketBuyOrder = wallet.signOrder(marketBuyOrder)
+        val signedMarketBuyOrder = evmWallet.signOrder(marketBuyOrder)
         println("Placing market buy order...")
-        val buyResponse = client.createOrder(signedMarketBuyOrder)
+        val buyResponse = evmClient.createOrder(signedMarketBuyOrder)
         println("Market buy order placed: ${buyResponse.order}")
 
         // Wait for market buy order created confirmation
@@ -282,7 +279,7 @@ fun main() {
                 }
             }
         }
-        val trades = client.listTrades()
+        val trades = evmClient.listTrades()
         println("Found ${trades.trades.size}")
         trades.trades.forEach {
             println("Trade ${it.id} (client order id ${it.clientOrderId}): ${it.side} ${it.amount} of market ${it.marketId} at ${it.price}")
@@ -290,8 +287,8 @@ fun main() {
 
         // Cancel all orders
         println("Cancelling all orders...")
-        val orders = client.listOrders(marketId = market.id).orders
-        client.cancelOpenOrders(listOf(market.id))
+        val orders = evmClient.listOrders(marketId = market.id).orders
+        evmClient.cancelOpenOrders(listOf(market.id))
         orders.forEach { order ->
             if (order.status == OrderStatus.Open) {
                 println("Cancelling order: ${order.clientOrderId}")
@@ -303,7 +300,7 @@ fun main() {
 
         // Get final balances
         println("Retrieving final balances...")
-        val balances = client.getBalances().balances
+        val balances = evmClient.getBalances().balances
         println("Final balances:")
         balances.forEach { balance ->
             println("${balance.symbol}: ${balance.total} (${balance.available} available)")
@@ -323,7 +320,7 @@ fun main() {
                 if ((baseIsOnBitcoin && symbol == baseSymbol) || (quoteIsOnBitcoin && symbol == quoteSymbol)) {
                     bitcoinClient.createWithdrawal(bitcoinWallet.signWithdraw(symbol, balance.available))
                 } else {
-                    wallet.withdraw(AssetAmount(symbol, balance.available))
+                    evmWallet.withdraw(AssetAmount(symbol, balance.available))
                 }
             }
         }
