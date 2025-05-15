@@ -77,7 +77,7 @@ fun main() {
     println("EVM wallet ${evmWallet.address} authorized")
 
     // Connect to WebSocket for real-time updates
-    val webSocket = evmClient.newWebSocket()
+    var webSocket = evmClient.newWebSocket()
 
     try {
         val evmChain = config.evmChains.first()
@@ -289,14 +289,60 @@ fun main() {
         println("Cancelling all orders...")
         val orders = evmClient.listOrders(marketId = market.id).orders
         evmClient.cancelOpenOrders(listOf(market.id))
-        orders.forEach { order ->
-            if (order.status == OrderStatus.Open) {
-                println("Cancelling order: ${order.clientOrderId}")
-                // Wait for order cancelled confirmation
-                order.clientOrderId?.let { waitForOrderCancelled(webSocket, it) }
-            }
-        }
+        waitForCancelledOrders(
+            webSocket,
+            orders
+                .filter {
+                    it.status == OrderStatus.Open
+                }.mapNotNull {
+                    it.clientOrderId
+                },
+        )
         println("All orders cancelled")
+
+        // websocket can have cancel-on-disconnect behavior set
+        // note - passing an empty list of market ids will cancel all
+        webSocket.setCancelOnDisconnect(listOf(market.id))
+
+        // add another order
+        val cancelOnDisconnectOrder =
+            CreateOrderApiRequest.Limit(
+                marketId = market.id,
+                side = OrderSide.Sell,
+                amount = OrderAmount.Fixed(makerBaseAmount.toFundamentalUnits(baseSymbol.decimals)),
+                price = price.toBigDecimal(),
+                signature = EvmSignature.emptySignature(),
+                nonce = generateOrderNonce(),
+                clientOrderId = "example-cancel-on-disconnect-${System.currentTimeMillis()}",
+                signingAddress = evmKeyPair.address().value,
+                verifyingChainId = evmChain.id,
+                captchaToken = "recaptcha-token",
+                cancelSide = false,
+            )
+
+        println("Placing cancel-on-disconnect order...")
+        val cancelOnDisconnectOrderResponse = evmClient.createOrder(evmWallet.signOrder(cancelOnDisconnectOrder))
+        println("Cancel-on-disconnect order placed: ${cancelOnDisconnectOrderResponse.order}")
+
+        waitForOrderCreated(webSocket, cancelOnDisconnectOrderResponse.order.clientOrderId)
+
+        // subscribe to orders with a new websocket
+        val webSocket2 = evmClient.newWebSocket()
+        webSocket2.subscribeToMyOrders()
+        waitForSubscription(webSocket2) { it is MyOrders }
+
+        // now close the original websocket
+        println("now disconnect the websocket")
+        webSocket.close()
+
+        // check that the order gets canceled
+        waitForCancelledOrders(
+            webSocket2,
+            listOf(cancelOnDisconnectOrderResponse.clientOrderId!!),
+        )
+        println("cancel-on-disconnect order was canceled")
+
+        webSocket = evmClient.newWebSocket()
 
         // Get final balances
         println("Retrieving final balances...")
@@ -414,24 +460,27 @@ private fun waitForOrderCreated(
     }
 }
 
-private fun waitForOrderCancelled(
+private fun waitForCancelledOrders(
     webSocket: ReconnectingWebsocketClient,
-    orderId: ClientOrderId,
+    orderIds: List<ClientOrderId>,
 ) {
-    while (true) {
-        when (val publish = webSocket.receivedDecoded().first()) {
+    val remainingOrderIds = orderIds.toMutableSet()
+    while (remainingOrderIds.isNotEmpty()) {
+        when (val publish = webSocket.receivedDecoded().firstOrNull()) {
             is OutgoingWSMessage.Pong -> {}
             is OutgoingWSMessage.Publish -> {
                 when (publish.data) {
                     is MyOrdersUpdated -> {
-                        if (publish.data.orders.any { it.clientOrderId == orderId && it.status == OrderStatus.Cancelled }) {
-                            println("Order cancelled: ${publish.data}")
-                            break
-                        }
+                        remainingOrderIds.removeAll(
+                            publish.data.orders
+                                .mapNotNull { it.clientOrderId }
+                                .toSet(),
+                        )
                     }
                     else -> {}
                 }
             }
+            null -> {}
         }
     }
 }

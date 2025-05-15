@@ -14,6 +14,7 @@ import xyz.funkybit.client.model.MarketId
 import xyz.funkybit.client.model.OHLCDuration
 import xyz.funkybit.client.model.OutgoingWSMessage
 import xyz.funkybit.client.model.SubscriptionTopic
+import xyz.funkybit.client.model.WSFeature
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.concurrent.thread
 import kotlin.math.pow
@@ -32,6 +33,7 @@ class ReconnectingWebsocketClient(
 ) {
     private val logger = KotlinLogging.logger {}
     private val activeSubscriptions = CopyOnWriteArraySet<SubscriptionTopic>()
+    private var cancelOnDisconnectFeature: WSFeature.CancelOnDisconnect? = null
     private var websocket = newWebsocket()
     private var heartbeatThread: Thread? = null
     private var isRunning = true
@@ -116,6 +118,11 @@ class ReconnectingWebsocketClient(
                     // Resubscribe to all active topics
                     activeSubscriptions.forEach { topic ->
                         websocket.send(IncomingWSMessage.Subscribe(topic))
+                    }
+
+                    // set cancel on disconnect behavior
+                    cancelOnDisconnectFeature?.let {
+                        websocket.setCancelOnDisconnect(it)
                     }
                     inMaintenanceMode = false
                     logger.info { "Reconnected successfully" }
@@ -206,6 +213,18 @@ class ReconnectingWebsocketClient(
         withReconnection { ws -> ws.send(IncomingWSMessage.Unsubscribe(topic)) }
     }
 
+    fun setCancelOnDisconnect(marketIds: List<MarketId>) {
+        cancelOnDisconnectFeature =
+            WSFeature.CancelOnDisconnect(true, marketIds).also {
+                withReconnection { ws -> ws.setCancelOnDisconnect(it) }
+            }
+    }
+
+    fun unsetCancelOnDisconnect() {
+        cancelOnDisconnectFeature = null
+        withReconnection { ws -> ws.setCancelOnDisconnect(WSFeature.CancelOnDisconnect(false, emptyList())) }
+    }
+
     fun receivedDecoded(): Sequence<OutgoingWSMessage> =
         sequence {
             while (isRunning) {
@@ -251,6 +270,7 @@ class ReconnectingWebsocketClient(
             logger.warn { "Got an exception closing the websocket: ${e.message}" }
         }
         activeSubscriptions.clear()
+        cancelOnDisconnectFeature = null
     }
 }
 
@@ -260,6 +280,10 @@ fun WsClient.send(message: IncomingWSMessage) {
 
 fun WsClient.ping() {
     send(IncomingWSMessage.Ping)
+}
+
+fun WsClient.setCancelOnDisconnect(feature: WSFeature.CancelOnDisconnect) {
+    send(IncomingWSMessage.SetFeature(feature))
 }
 
 fun WebSocket.send(message: IncomingWSMessage) {
