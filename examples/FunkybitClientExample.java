@@ -43,8 +43,12 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static xyz.funkybit.client.BitcoinConfigKt.getBitcoinConfig;
 import static xyz.funkybit.client.model.ChainId.BITCOIN;
@@ -312,15 +316,55 @@ public class FunkybitClientExample {
             List<Order> orders = evmClient.listOrders(Collections.emptyList(), market.getId()).getOrders();
             evmClient.cancelOpenOrders(List.of(market.getId()));
 
-            for (Order order : orders) {
-                if (order.getStatus() == OrderStatus.Open) {
-                    System.out.println("Cancelling order: " + order.getClientOrderId());
-                    // Wait for order cancelled confirmation
-                    if (order.getClientOrderId() != null) waitForOrderCancelled(webSocket, order.getClientOrderId());
-                }
-            }
+            List<String> openOrders = orders.stream().filter(order -> order.getStatus() == OrderStatus.Open).map(order -> order.getClientOrderId()).toList();
+            waitForCancelledOrders(webSocket, openOrders);
             System.out.println("All orders cancelled");
 
+            // websocket can have cancel-on-disconnect behavior set
+            // note - passing an empty list of market ids will cancel all
+            webSocket.setCancelOnDisconnect(Collections.singletonList(market.getId()));
+
+            // add another order
+            CreateOrderApiRequest.Limit cancelOnDisconnectOrder =
+                    new CreateOrderApiRequest.Limit(
+                            generateOrderNonce(),
+                            market.getId(),
+                            OrderSide.Sell,
+                            new OrderAmount.Fixed(toFundamentalUnits(makerBaseAmount, baseSymbol.getDecimals())),
+                            new BigDecimal(price),
+                            EvmSignature.Companion.emptySignature(),
+                            evmKeyPair.address().getValue(),
+                            evmChain.getId(),
+                            "example-cancel-on-disconnect-" + System.currentTimeMillis(),
+                            "recaptcha-token",
+                            false
+                    );
+
+            System.out.println("Placing cancel-on-disconnect order...");
+
+            CreateOrderApiRequest signedCancelOnDisconnectOrder = evmWallet.signOrder(cancelOnDisconnectOrder, null);
+            CreateOrderApiResponse cancelOnDisconnectOrderResponse = evmClient.createOrder(signedCancelOnDisconnectOrder);
+            System.out.println("Cancel-on-disconnect order placed: " + cancelOnDisconnectOrderResponse.getOrder());
+
+            waitForOrderCreated(webSocket, cancelOnDisconnectOrderResponse.getOrder().getClientOrderId());
+
+            // subscribe to orders with a new websocket
+            ReconnectingWebsocketClient webSocket2 = evmClient.newWebSocket();
+            webSocket2.subscribeToMyOrders();
+            waitForSubscription(webSocket2, message -> message instanceof MyOrders);
+
+            // now close the original websocket
+            System.out.println("now disconnect the websocket");
+            webSocket.close(new WsStatus(WsStatus.Companion.getNORMAL().getCode(), ""));
+
+            // check that the order gets canceled
+            waitForCancelledOrders(
+                    webSocket2,
+                    Collections.singletonList(cancelOnDisconnectOrderResponse.getClientOrderId())
+            );
+            System.out.println("cancel-on-disconnect order was canceled");
+
+            webSocket = evmClient.newWebSocket();
             // Get final balances
             System.out.println("Retrieving final balances...");
             List<Balance> balances = evmClient.getBalances().getBalances();
@@ -474,22 +518,25 @@ public class FunkybitClientExample {
         }
     }
 
-    private static void waitForOrderCancelled(
+    private static void waitForCancelledOrders(
             ReconnectingWebsocketClient webSocket,
-            String orderId
+            List<String> orderIds
     ) {
-        while (true) {
-            OutgoingWSMessage message = webSocket.receivedDecoded().iterator().next();
-            if (message instanceof OutgoingWSMessage.Publish publish) {
-                Publishable data = publish.getData();
-
-                if (data instanceof MyOrdersUpdated ordersUpdated) {
-                    for (Order order : ordersUpdated.getOrders()) {
-                        if (order.getClientOrderId().equals(orderId) &&
-                                order.getStatus() == OrderStatus.Cancelled) {
-                            System.out.println("Order cancelled: " + ordersUpdated);
-                            return;
-                        }
+        HashSet<String> remainingOrderIds = new HashSet<>(orderIds);
+        while (!remainingOrderIds.isEmpty()) {
+            Iterator<OutgoingWSMessage> iterator = webSocket.receivedDecoded().iterator();
+            if (iterator.hasNext()) {
+                OutgoingWSMessage publish = iterator.next();
+                if (publish instanceof OutgoingWSMessage.Pong) {
+                    // Do nothing
+                } else if (publish instanceof OutgoingWSMessage.Publish) {
+                    Object data = ((OutgoingWSMessage.Publish) publish).getData();
+                    if (data instanceof MyOrdersUpdated) {
+                        HashSet<String> updatedOrderIds = ((MyOrdersUpdated) data).getOrders().stream()
+                                .map(Order::getClientOrderId)
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toCollection(HashSet::new));
+                        remainingOrderIds.removeAll(updatedOrderIds);
                     }
                 }
             }

@@ -12,10 +12,28 @@ import xyz.funkybit.client.utils.BigIntegerJson
 @OptIn(ExperimentalSerializationApi::class)
 @JsonClassDiscriminator("type")
 @Serializable
+sealed class WSFeature {
+    @Serializable
+    @SerialName("CancelOnDisconnect")
+    data class CancelOnDisconnect(
+        val value: Boolean,
+        val marketIds: List<MarketId>,
+    ) : WSFeature()
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@JsonClassDiscriminator("type")
+@Serializable
 sealed class IncomingWSMessage {
     @Serializable
     @SerialName("Ping")
     data object Ping : IncomingWSMessage()
+
+    @Serializable
+    @SerialName("SetFeature")
+    data class SetFeature(
+        val feature: WSFeature,
+    ) : IncomingWSMessage()
 
     @Serializable
     @SerialName("Subscribe")
