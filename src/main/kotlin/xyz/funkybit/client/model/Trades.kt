@@ -42,6 +42,7 @@ data class Trade(
     val counterOrderId: OrderId,
     val side: OrderSide,
     val amount: BigIntegerJson,
+    val notional: BigIntegerJson? = null,
     val price: BigDecimalJson,
     val feeAmount: BigIntegerJson,
     val feeSymbol: Symbol,

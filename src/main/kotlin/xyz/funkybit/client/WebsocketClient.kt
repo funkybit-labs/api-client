@@ -25,26 +25,34 @@ val json =
     Json {
         encodeDefaults = true
         coerceInputValues = true
+        ignoreUnknownKeys = true
     }
 
-class ReconnectingWebsocketClient(
-    private val apiUrl: String,
-    private val client: FunkybitApiClient,
+class ResubscriptionError : Exception()
+
+open class ReconnectingWebsocketClient(
+    protected val apiUrl: String,
+    protected val client: FunkybitApiClient,
 ) {
     private val logger = KotlinLogging.logger {}
     private val activeSubscriptions = CopyOnWriteArraySet<SubscriptionTopic>()
     private var cancelOnDisconnectFeature: WSFeature.CancelOnDisconnect? = null
-    private var websocket = newWebsocket()
+    private lateinit var websocket: WsClient
     private var heartbeatThread: Thread? = null
     private var isRunning = true
-    private var inMaintenanceMode = false
+    protected var inMaintenanceMode = false
+    var isConnected = false
 
-    init {
+    fun initialize() {
+        websocket =
+            newWebsocket().also {
+                isConnected = true
+            }
         startHeartbeat()
     }
 
-    private fun newWebsocket(): WsClient {
-        logger.info { " Connecting to websocket ${apiUrl.replace("http:", "ws:").replace("https:", "wss:")}" }
+    protected open fun newWebsocket(): WsClient {
+        logger.info { "Connecting to websocket ${apiUrl.replace("http:", "ws:").replace("https:", "wss:")}" }
         return blocking(
             uri =
                 Uri.of(
@@ -81,6 +89,33 @@ class ReconnectingWebsocketClient(
             }
     }
 
+    @Synchronized
+    @Throws(ResubscriptionError::class)
+    private fun attemptReconnect() {
+        // another thread trying at the same time might have already reconnected
+        if (isConnected) return
+
+        // Create new websocket
+        val ws = newWebsocket()
+
+        // Resubscribe to all active topics
+        try {
+            activeSubscriptions.forEach { topic ->
+                ws.send(IncomingWSMessage.Subscribe(topic))
+            }
+
+            // set cancel on disconnect behavior
+            cancelOnDisconnectFeature?.let {
+                ws.setCancelOnDisconnect(it)
+            }
+            websocket = ws
+            isConnected = true
+        } catch (resubscribeException: Exception) {
+            logger.info(resubscribeException) { "Unable to resubscribe after reconnection" }
+            throw ResubscriptionError()
+        }
+    }
+
     // Helper function that handles reconnection
     private fun <T> withReconnection(
         maxRetries: Int = 1000,
@@ -93,6 +128,8 @@ class ReconnectingWebsocketClient(
             try {
                 return block(websocket)
             } catch (e: Exception) {
+                if (!isRunning) throw RuntimeException("Websocket has been closed")
+                isConnected = false
                 lastException = e
                 logger.warn { "WebSocket operation failed: ${e.message}" }
 
@@ -106,32 +143,34 @@ class ReconnectingWebsocketClient(
                             // (quick) exponential backoff with jitter
                             val baseDelay = (2 * 1.05.pow(retryCount.toDouble())).coerceAtMost(5000.0).toLong()
                             val jitter = Random.nextLong(baseDelay / 2)
-                            retryCount += 1
                             baseDelay + jitter
                         }
 
                     Thread.sleep(delay)
-
-                    // Create new websocket
-                    websocket = newWebsocket()
-
-                    // Resubscribe to all active topics
-                    activeSubscriptions.forEach { topic ->
-                        websocket.send(IncomingWSMessage.Subscribe(topic))
+                    while (!isConnected && retryCount < maxRetries) {
+                        try {
+                            attemptReconnect()
+                        } catch (_: ResubscriptionError) {
+                            retryCount += 1
+                            logger.warn { "Reconnection attempt failed during resubscription (retry $retryCount of $maxRetries)" }
+                        }
                     }
-
-                    // set cancel on disconnect behavior
-                    cancelOnDisconnectFeature?.let {
-                        websocket.setCancelOnDisconnect(it)
+                    if (!isConnected) {
+                        throw ResubscriptionError()
                     }
                     inMaintenanceMode = false
                     logger.info { "Reconnected successfully" }
+                } catch (_: ResubscriptionError) {
+                    logger.error { "Unable to successfully resubscribe following reconnect after $maxRetries attempts." }
+                    throw RuntimeException("Failed to reconnect")
                 } catch (reconnectException: Exception) {
                     // funkybit returns HTTP status code 418 for maintenance mode
-                    if ((reconnectException.message ?: "").startsWith("Expected HTTP 101 response but was '418 '")) {
+                    if ((reconnectException.message ?: "").contains("Expected HTTP 101 response but was '418 '")) {
                         inMaintenanceMode = true
+                    } else {
+                        retryCount += 1
                     }
-                    logger.warn { "Reconnection attempt failed: ${reconnectException.message}" }
+                    logger.warn { "Reconnection attempt failed (retry $retryCount of $maxRetries): ${reconnectException.message}" }
                 }
             }
         }
@@ -141,26 +180,26 @@ class ReconnectingWebsocketClient(
 
     fun subscribeToOrderBook(marketId: MarketId) {
         val topic = SubscriptionTopic.OrderBook(marketId)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToIncrementalOrderBook(marketId: MarketId) {
         val topic = SubscriptionTopic.IncrementalOrderBook(marketId)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToMarketAmmState(marketId: MarketId) {
         val topic = SubscriptionTopic.MarketAmmState(marketId)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToLaunchpadUpdates() {
         val topic = SubscriptionTopic.Launchpad
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToPrices(
@@ -168,20 +207,20 @@ class ReconnectingWebsocketClient(
         duration: OHLCDuration = OHLCDuration.P5M,
     ) {
         val topic = SubscriptionTopic.Prices(marketId, duration)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToMyOrders() {
         val topic = SubscriptionTopic.MyOrders
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToMyTrades() {
         val topic = SubscriptionTopic.MyTrades
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun unsubscribeToMyTrades() {
@@ -192,25 +231,25 @@ class ReconnectingWebsocketClient(
 
     fun subscribeToMarketTrades(marketId: MarketId) {
         val topic = SubscriptionTopic.MarketTrades(marketId)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToBalances() {
         val topic = SubscriptionTopic.Balances
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun subscribeToConsumptions(marketId: MarketId) {
         val topic = SubscriptionTopic.Consumption(marketId)
-        activeSubscriptions.add(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Subscribe(topic)) }
+        activeSubscriptions.add(topic)
     }
 
     fun unsubscribe(topic: SubscriptionTopic) {
-        activeSubscriptions.remove(topic)
         withReconnection { ws -> ws.send(IncomingWSMessage.Unsubscribe(topic)) }
+        activeSubscriptions.remove(topic)
     }
 
     fun setCancelOnDisconnect(marketIds: List<MarketId>) {
@@ -265,6 +304,7 @@ class ReconnectingWebsocketClient(
         heartbeatThread?.join(100L)
         try {
             websocket.close(status)
+            isConnected = false
         } catch (e: Exception) {
             // Ignore exceptions during close
             logger.warn { "Got an exception closing the websocket: ${e.message}" }
