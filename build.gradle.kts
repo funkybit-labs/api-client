@@ -52,12 +52,18 @@ dependencies {
     implementation("org.http4k:http4k-format-argo:$http4kVersion")
     implementation("org.http4k:http4k-client-okhttp:$http4kVersion")
     implementation("org.http4k:http4k-client-websocket:$http4kVersion")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.11.3")
+    testImplementation("io.mockk:mockk:1.13.5")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }
 
 tasks.test {
     useJUnitPlatform()
 }
-
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
 tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
 }
