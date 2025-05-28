@@ -1,4 +1,5 @@
 import kotlinx.datetime.Clock;
+import kotlinx.datetime.Instant;
 import org.http4k.websocket.WsStatus;
 import xyz.funkybit.client.BitcoinWallet;
 import xyz.funkybit.client.FunkybitApiClient;
@@ -304,7 +305,7 @@ public class FunkybitClientExample {
                     }
                 }
             }
-            TradesApiResponse trades = evmClient.listTrades(null, null);
+            TradesApiResponse trades = evmClient.listTrades(null, null, null);
             System.out.println("Found " + trades.getTrades().size() + " trades");
             for (Trade trade : trades.getTrades()) {
                 System.out.println("Trade " + trade.getId() + " (client order id " + trade.getClientOrderId() + "): " + trade.getSide() + " " + trade.getAmount() + " of market " + trade.getMarketId() + " at " + trade.getPrice());

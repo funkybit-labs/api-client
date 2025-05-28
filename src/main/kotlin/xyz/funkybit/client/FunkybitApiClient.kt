@@ -361,6 +361,7 @@ class FunkybitApiClient(
 
     fun tryListTrades(
         beforeTimestamp: Instant? = null,
+        afterTimestamp: Instant? = null,
         limit: Int? = null,
     ): Either<ApiCallFailure, TradesApiResponse> =
         execute(
@@ -373,6 +374,9 @@ class FunkybitApiClient(
                         .apply {
                             if (beforeTimestamp != null) {
                                 addQueryParameter("before-timestamp", beforeTimestamp.toString())
+                            }
+                            if (afterTimestamp != null) {
+                                addQueryParameter("after-timestamp", afterTimestamp.toString())
                             }
                             if (limit != null) {
                                 addQueryParameter("limit", limit.toString())
@@ -430,9 +434,10 @@ class FunkybitApiClient(
 
     fun listTrades(
         beforeTimestamp: Instant? = null,
+        afterTimestamp: Instant? = null,
         limit: Int? = null,
     ) = sendWithReAuth {
-        tryListTrades(beforeTimestamp, limit).throwOrReturn()
+        tryListTrades(beforeTimestamp, afterTimestamp, limit).throwOrReturn()
     }
 
     // Helper methods
